@@ -19,8 +19,7 @@
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, doc, setDoc, getDoc, collection,
-    addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc, initializeFirestore,
-    persistentLocalCache, persistentMultipleTabManager
+    addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   // ── Firebase Yapılandırması ─────────────────────
@@ -39,10 +38,8 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   
-  const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()}),
-    experimentalForceLongPolling: true
-  });
+  // IndexedDB kısıtlamalarına karşı standart veritabanı başlatımı
+  const db = getFirestore(app);
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
   const uid = () => auth.currentUser?.uid;
@@ -175,36 +172,40 @@
   document.addEventListener("DOMContentLoaded", () => {
     showSkeleton(true);
 
-    const initAuth = async () => {
+    const setupAuthAndData = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         }
-      } catch (err) { console.error("Auth init hatası:", err); }
-    };
-    initAuth();
+      } catch (err) { 
+        console.error("Auth init hatası:", err); 
+      }
 
-    onAuthStateChanged(auth, async user => {
-      currentUser = user;
-      if (user) {
-        try {
-          profile = await loadUserProfile();
-          await handleStreakCalculation();
-          applyTheme(profile.theme || "light");
-          applyAccent(profile.accent || "indigo");
-          tasks = await loadTasks();
-          showApp();
-          renderAll();
-        } catch (err) {
-          console.error("Başlangıç verileri yüklenirken hata:", err);
-        } finally {
+      onAuthStateChanged(auth, async user => {
+        currentUser = user;
+        if (user) {
+          try {
+            profile = await loadUserProfile();
+            await handleStreakCalculation();
+            applyTheme(profile.theme || "light");
+            applyAccent(profile.accent || "indigo");
+            tasks = await loadTasks();
+            showApp();
+            renderAll();
+          } catch (err) {
+            console.error("Başlangıç verileri yüklenirken hata:", err);
+            showApp(); // Hata olsa bile arayüzü göster
+          } finally {
+            showSkeleton(false);
+          }
+        } else {
+          showAuth();
           showSkeleton(false);
         }
-      } else {
-        showAuth();
-        showSkeleton(false);
-      }
-    });
+      });
+    };
+
+    setupAuthAndData();
 
     /* Auth Events */
     document.getElementById("authForm").addEventListener("submit", async e => {
@@ -428,8 +429,10 @@
     const todayStr = new Date().toISOString().split("T")[0];
     loadReport(todayStr).then(r => {
       const checkEl = document.getElementById("summaryReportCheck");
-      if (r.how || r.achieved) checkEl.innerHTML = "Yazıldı <span class='badge ok'>✓</span>";
-      else checkEl.innerHTML = "Yazılmadı <span class='badge warn'>✕</span>";
+      if (checkEl) {
+        if (r.how || r.achieved) checkEl.innerHTML = "Yazıldı <span class='badge ok'>✓</span>";
+        else checkEl.innerHTML = "Yazılmadı <span class='badge warn'>✕</span>";
+      }
     });
   }
 
@@ -1328,6 +1331,11 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .btn-secondary:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); transform: translateY(-2px); }
 
+/* Badge Classes */
+.badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; margin-left: 0.4rem; }
+.badge.ok { background: rgba(16, 185, 129, 0.2); color: #059669; }
+.badge.warn { background: rgba(245, 158, 11, 0.2); color: #d97706; }
+
 /* Layout & Cards */
 .app-header {
   padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem;
@@ -1376,9 +1384,13 @@ html.dark .tab-btn:hover { background: rgba(255,255,255,0.06); }
 .task-card.done { opacity: .6; transform: scale(.98); filter: grayscale(50%); }
 .task-main-row { display: flex; align-items: center; gap: 1rem; }
 .task-text { font-size: 1.05rem; font-weight: 600; line-height: 1.4; color: var(--text); }
-.check-btn { width: 28px; height: 28px; border-radius: 8px; color: var(--accent); transition: transform 0.2s; cursor: pointer; }
+.check-btn { width: 28px; height: 28px; border-radius: 8px; color: var(--accent); transition: transform 0.2s; cursor: pointer; border: none; background: transparent; }
 .check-btn:hover { transform: scale(1.1); }
 .glow-chip { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.2); }
+.icon-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--surface-solid); transition: all .2s; cursor: pointer; }
+.icon-btn:hover { background: var(--accent-bg); color: var(--accent); }
+.icon-btn.del:hover { background: #fee2e2; color: #ef4444; }
+.task-actions { display: flex; gap: 0.25rem; }
 
 /* Breathing & Pomo Elements */
 .breath-circle {
@@ -1432,18 +1444,18 @@ html.dark .tab-btn:hover { background: rgba(255,255,255,0.06); }
       <div class="brand-logo-bottom">dailyFORmind</div>
     </div>
     
-    <h2 id="authTitle" class="auth-title">Zihnini Düzenlemeye Başla</h2>
+    <h2 id="authTitle" class="text-xl font-bold text-center mb-6">Zihnini Düzenlemeye Başla</h2>
     <form id="authForm">
-      <div id="authNameWrap" class="auth-field" style="display:none">
-        <label>İsminiz</label>
+      <div id="authNameWrap" class="auth-field" style="display:none; margin-bottom: 1rem;">
+        <label class="block font-bold text-sm mb-2 muted">İsminiz</label>
         <input id="authName" type="text" placeholder="Adınız nedir?" autocomplete="name" />
       </div>
-      <div class="auth-field">
-        <label>E-posta Adresi</label>
+      <div class="auth-field" style="margin-bottom: 1rem;">
+        <label class="block font-bold text-sm mb-2 muted">E-posta Adresi</label>
         <input id="authEmail" type="email" placeholder="ornek@mail.com" required autocomplete="email" />
       </div>
-      <div class="auth-field">
-        <label>Şifre</label>
+      <div class="auth-field" style="margin-bottom: 1rem;">
+        <label class="block font-bold text-sm mb-2 muted">Şifre</label>
         <input id="authPass" type="password" placeholder="••••••" required autocomplete="current-password" />
       </div>
       <div id="authError" style="color:#ef4444; font-size:0.85rem; margin-bottom:1rem; font-weight:600;"></div>
@@ -1466,9 +1478,9 @@ html.dark .tab-btn:hover { background: rgba(255,255,255,0.06); }
       <span class="dfm">DFM</span>
       <span class="full">dailyFORmind</span>
     </div>
-    <button id="themeToggle" class="icon-btn-header" title="Karanlık/Aydınlık Mod">🌙</button>
+    <button id="themeToggle" class="icon-btn-header" style="border: none; background: transparent; cursor: pointer;" title="Karanlık/Aydınlık Mod">🌙</button>
     <div id="headerAvatar" class="header-avatar" style="background:var(--accent-grad)">?</div>
-    <button id="logoutBtn" class="icon-btn-header" title="Çıkış Yap">🚪</button>
+    <button id="logoutBtn" class="icon-btn-header" style="border: none; background: transparent; cursor: pointer;" title="Çıkış Yap">🚪</button>
   </header>
 
   <div class="tabs-outer glass">
