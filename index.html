@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="tr" class="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FokusADHD – Zihnini Düzenle</title>
+
+<!-- Firebase SDKs -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    onAuthStateChanged, signOut, updateProfile
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, doc, setDoc, getDoc, collection,
+    addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ── Firebase Yapılandırmanı buraya yaz ──────────────────────────────
+  const firebaseConfig = {
+  apiKey: "AIzaSyB-BrneZP1lNoa6axKSHw0ooTobY1n8jjg",
+  authDomain: "dailyforme-f6c9d.firebaseapp.com",
+  projectId: "dailyforme-f6c9d",
+  storageBucket: "dailyforme-f6c9d.firebasestorage.app",
+  messagingSenderId: "943988769887",
+  appId: "1:943988769887:web:212c278199f683c43e47ea",
+  measurementId: "G-8ZNMNMSBT4"
+  };
+  // ────────────────────────────────────────────────────────────────────
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  /* ── Yardımcılar ── */
+  const uid = () => auth.currentUser?.uid;
+
+  async function saveUserProfile(data) {
+    await setDoc(doc(db, "users", uid()), data, { merge: true });
+  }
+  async function loadUserProfile() {
+    const snap = await getDoc(doc(db, "users", uid()));
+    return snap.exists() ? snap.data() : {};
+  }
+
+  // Görevler
+  async function saveTasks(tasks) {
+    await setDoc(doc(db, "tasks", uid()), { list: tasks });
+  }
+  async function loadTasks() {
+    const snap = await getDoc(doc(db, "tasks", uid()));
+    return snap.exists() ? snap.data().list || [] : [];
+  }
+
+  // Günlük rapor
+  async function saveReport(date, data) {
+    await setDoc(doc(db, "reports", `${uid()}_${date}`), { ...data, date });
+  }
+  async function loadReport(date) {
+    const snap = await getDoc(doc(db, "reports", `${uid()}_${date}`));
+    return snap.exists() ? snap.data() : {};
+  }
+
+  // Şifreli günlük
+  async function saveJournalEntry(entry) {
+    await addDoc(collection(db, `journals/${uid()}/entries`), {
+      text: entry, createdAt: serverTimestamp()
+    });
+  }
+  async function loadJournalEntries() {
+    const q    = query(collection(db, `journals/${uid()}/entries`), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+  async function deleteJournalEntry(id) {
+    await deleteDoc(doc(db, `journals/${uid()}/entries`, id));
+  }
+
+  // Brain dump
+  async function saveBrainDump(text) {
+    await addDoc(collection(db, `braindump/${uid()}/notes`), {
+      text, createdAt: serverTimestamp()
+    });
+  }
+  async function loadBrainDumps() {
+    const q    = query(collection(db, `braindump/${uid()}/notes`), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+  async function deleteBrainDump(id) {
+    await deleteDoc(doc(db, `braindump/${uid()}/notes`, id));
+  }
+
+  /* ── Uygulama Durumu ── */
+  let currentUser   = null;
+  let profile       = {};
+  let tasks         = [];
+  let journalLocked = true;
+  let activeTab     = "tasks";
+  let dragSrcIdx    = null;
+
+  /* ── DOM Hazır ── */
+  document.addEventListener("DOMContentLoaded", () => {
+    onAuthStateChanged(auth, async user => {
+      currentUser = user;
+      if (user) {
+        profile = await loadUserProfile();
+        applyTheme(profile.theme || "light");
+        applyAccent(profile.accent || "indigo");
+        tasks = await loadTasks();
+        showApp();
+        renderAll();
+      } else {
+        showAuth();
+      }
+    });
+
+    /* Auth formu */
+    document.getElementById("authForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const email  = document.getElementById("authEmail").value.trim();
+      const pass   = document.getElementById("authPass").value;
+      const isLogin = document.getElementById("authToggleMode").dataset.mode === "login";
+      const errEl  = document.getElementById("authError");
+      errEl.textContent = "";
+      try {
+        if (isLogin) {
+          await signInWithEmailAndPassword(auth, email, pass);
+        } else {
+          const cred = await createUserWithEmailAndPassword(auth, email, pass);
+          const name = document.getElementById("authName").value.trim() || "Kullanıcı";
+          await updateProfile(cred.user, { displayName: name });
+          await saveUserProfile({ displayName: name, theme: "light", accent: "indigo" });
+        }
+      } catch (err) {
+        errEl.textContent = firebaseErrorMsg(err.code);
+      }
+    });
+
+    document.getElementById("authToggleMode").addEventListener("click", e => {
+      const isLogin = e.target.dataset.mode === "login";
+      e.target.dataset.mode = isLogin ? "register" : "login";
+      document.getElementById("authTitle").textContent = isLogin ? "Hesap Oluştur" : "Giriş Yap";
+      e.target.textContent  = isLogin ? "Zaten hesabın var mı? Giriş yap" : "Hesabın yok mu? Kayıt ol";
+      document.getElementById("authSubmitBtn").textContent = isLogin ? "Kayıt Ol" : "Giriş Yap";
+      document.getElementById("authNameWrap").style.display = isLogin ? "block" : "none";
+    });
+
+    /* Çıkış */
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      await signOut(auth);
+    });
+
+    /* Tab geçişi */
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
+
+    /* Karanlık mod */
+    document.getElementById("themeToggle").addEventListener("click", async () => {
+      const isDark = document.documentElement.classList.toggle("dark");
+      const theme  = isDark ? "dark" : "light";
+      profile.theme = theme;
+      if (uid()) await saveUserProfile({ theme });
+    });
+
+    /* Görev ekle */
+    document.getElementById("taskInput").addEventListener("keydown", async e => {
+      if (e.key === "Enter") await addTask();
+    });
+    document.getElementById("addTaskBtn").addEventListener("click", addTask);
+
+    /* Profil kaydet */
+    document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
+
+    /* Rapor kaydet */
+    document.getElementById("saveReportBtn").addEventListener("click", saveReport_);
+
+    /* Günlük kilit */
+    document.getElementById("journalUnlockBtn").addEventListener("click", checkJournalPin);
+    document.getElementById("journalPinInput").addEventListener("keydown", e => {
+      if (e.key === "Enter") checkJournalPin();
+    });
+    document.getElementById("journalLockBtn").addEventListener("click", () => {
+      journalLocked = true;
+      renderJournal();
+    });
+    document.getElementById("saveJournalBtn").addEventListener("click", saveJournalEntry_);
+
+    /* Brain dump aç/kapat */
+    document.getElementById("brainDumpFab").addEventListener("click", toggleBrainDump);
+    document.getElementById("closeBrainDump").addEventListener("click", () => {
+      document.getElementById("brainDumpPanel").classList.add("hidden");
+    });
+    document.getElementById("sendBrainDump").addEventListener("click", sendBrainDump);
+    document.getElementById("brainDumpText").addEventListener("keydown", e => {
+      if (e.key === "Enter" && e.ctrlKey) sendBrainDump();
+    });
+
+    /* Accent seçici */
+    document.querySelectorAll(".accent-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const accent = btn.dataset.accent;
+        applyAccent(accent);
+        profile.accent = accent;
+        if (uid()) await saveUserProfile({ accent });
+      });
+    });
+
+    /* Profil soruları (Kendini Tanı) */
+    document.getElementById("saveQuizBtn").addEventListener("click", saveQuiz);
+
+    /* Günlük tarih seçici */
+    const today = new Date().toISOString().split("T")[0];
+    document.getElementById("reportDate").value = today;
+    document.getElementById("reportDate").addEventListener("change", async e => {
+      const r = await loadReport(e.target.value);
+      document.getElementById("reportHow").value      = r.how      || "";
+      document.getElementById("reportAchieved").value = r.achieved || "";
+      document.getElementById("reportHard").value     = r.hard     || "";
+    });
+  });
+
+  /* ── UI Fonksiyonları ── */
+  function showAuth() {
+    document.getElementById("authScreen").style.display = "flex";
+    document.getElementById("appScreen").style.display  = "none";
+  }
+  function showApp() {
+    document.getElementById("authScreen").style.display = "none";
+    document.getElementById("appScreen").style.display  = "flex";
+  }
+
+  function renderAll() {
+    renderTasks();
+    renderProfile();
+    renderJournal();
+    renderBrainDumps();
+    loadReportForToday();
+    loadQuiz();
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll(".tab-btn").forEach(b => {
+      b.classList.toggle("tab-active", b.dataset.tab === tab);
+    });
+    document.querySelectorAll(".tab-panel").forEach(p => {
+      p.classList.toggle("hidden", p.dataset.panel !== tab);
+    });
+    if (tab === "journal") renderJournal();
+    if (tab === "braindump_list") renderBrainDumps();
+  }
+
+  /* ── Görevler ── */
+  async function addTask() {
+    const input = document.getElementById("taskInput");
+    const text  = input.value.trim();
+    if (!text) return;
+    tasks.push({ id: Date.now(), text, done: false });
+    input.value = "";
+    await saveTasks(tasks);
+    renderTasks();
+  }
+
+  async function toggleTask(id) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    t.done = !t.done;
+    await saveTasks(tasks);
+    renderTasks();
+    if (t.done) fireConfetti();
+  }
+
+  async function deleteTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    await saveTasks(tasks);
+    renderTasks();
+  }
+
+  async function moveTask(idx, dir) {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= tasks.length) return;
+    [tasks[idx], tasks[newIdx]] = [tasks[newIdx], tasks[idx]];
+    await saveTasks(tasks);
+    renderTasks();
+  }
+
+  function renderTasks() {
+    const list = document.getElementById("taskList");
+    if (!tasks.length) {
+      list.innerHTML = `<p class="text-center text-sm muted mt-6">Henüz görev yok. Yukarıdan ekle 🎯</p>`;
+      return;
+    }
+    list.innerHTML = tasks.map((t, i) => `
+      <div class="task-item ${t.done ? "done" : ""}" draggable="true"
+           data-idx="${i}" id="task-${t.id}">
+        <button class="check-btn" onclick="window._toggleTask(${t.id})" aria-label="Tamamla">
+          ${t.done ? checkIcon() : emptyCheckIcon()}
+        </button>
+        <span class="task-text">${escHtml(t.text)}</span>
+        <div class="task-actions">
+          <button onclick="window._moveTask(${i}, -1)" class="icon-btn" title="Yukarı">↑</button>
+          <button onclick="window._moveTask(${i}, 1)"  class="icon-btn" title="Aşağı">↓</button>
+          <button onclick="window._deleteTask(${t.id})" class="icon-btn del" title="Sil">✕</button>
+        </div>
+      </div>
+    `).join("");
+
+    // Drag & Drop
+    list.querySelectorAll(".task-item").forEach(el => {
+      el.addEventListener("dragstart", e => {
+        dragSrcIdx = +el.dataset.idx;
+        e.dataTransfer.effectAllowed = "move";
+      });
+      el.addEventListener("dragover", e => { e.preventDefault(); el.classList.add("drag-over"); });
+      el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
+      el.addEventListener("drop", async e => {
+        e.preventDefault();
+        el.classList.remove("drag-over");
+        const targetIdx = +el.dataset.idx;
+        if (dragSrcIdx === null || dragSrcIdx === targetIdx) return;
+        const moved = tasks.splice(dragSrcIdx, 1)[0];
+        tasks.splice(targetIdx, 0, moved);
+        dragSrcIdx = null;
+        await saveTasks(tasks);
+        renderTasks();
+      });
+    });
+  }
+
+  // Global kancalar (onclick satırı içinden çağrı)
+  window._toggleTask = (id) => toggleTask(id);
+  window._deleteTask = (id) => deleteTask(id);
+  window._moveTask   = (i, d) => moveTask(i, d);
+
+  /* ── Konfeti ── */
+  function fireConfetti() {
+    if (typeof confetti === "undefined") return;
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 },
+      colors: ["#a78bfa", "#f0abfc", "#67e8f9", "#86efac", "#fde68a"] });
+  }
+
+  /* ── Profil ── */
+  function renderProfile() {
+    document.getElementById("profileName").value   = profile.displayName || currentUser?.displayName || "";
+    document.getElementById("profileAccent").value = profile.accent      || "indigo";
+
+    // Avatar renkli daireler
+    const wrap = document.getElementById("avatarChoices");
+    const colors = ["#a78bfa","#f0abfc","#67e8f9","#86efac","#fde68a","#fb923c","#f87171"];
+    wrap.innerHTML = colors.map(c => `
+      <button class="avatar-circle ${profile.avatarColor === c ? "ring-2 ring-offset-2 ring-violet-500" : ""}"
+              style="background:${c}" data-color="${c}"
+              onclick="window._pickAvatar('${c}')" aria-label="Renk seç"></button>
+    `).join("");
+    document.getElementById("avatarPreview").style.background = profile.avatarColor || "#a78bfa";
+    document.getElementById("avatarInitial").textContent =
+      (profile.displayName || currentUser?.displayName || "?")[0].toUpperCase();
+  }
+
+  window._pickAvatar = async (color) => {
+    profile.avatarColor = color;
+    if (uid()) await saveUserProfile({ avatarColor: color });
+    renderProfile();
+    updateHeaderAvatar();
+  };
+
+  async function saveProfile() {
+    const name   = document.getElementById("profileName").value.trim();
+    const accent = document.getElementById("profileAccent").value;
+    profile.displayName = name;
+    profile.accent      = accent;
+    await saveUserProfile({ displayName: name, accent });
+    await updateProfile(auth.currentUser, { displayName: name });
+    applyAccent(accent);
+    updateHeaderAvatar();
+    showToast("Profil kaydedildi ✓");
+  }
+
+  function updateHeaderAvatar() {
+    const el = document.getElementById("headerAvatar");
+    el.textContent   = (profile.displayName || currentUser?.displayName || "?")[0].toUpperCase();
+    el.style.background = profile.avatarColor || "#a78bfa";
+  }
+
+  /* ── Rapor ── */
+  async function loadReportForToday() {
+    const today = document.getElementById("reportDate").value;
+    const r     = await loadReport(today);
+    document.getElementById("reportHow").value      = r.how      || "";
+    document.getElementById("reportAchieved").value = r.achieved || "";
+    document.getElementById("reportHard").value     = r.hard     || "";
+  }
+
+  async function saveReport_() {
+    const date     = document.getElementById("reportDate").value;
+    const how      = document.getElementById("reportHow").value;
+    const achieved = document.getElementById("reportAchieved").value;
+    const hard     = document.getElementById("reportHard").value;
+    await saveReport(date, { how, achieved, hard });
+    showToast("Rapor kaydedildi ✓");
+  }
+
+  /* ── Günlük ── */
+  function renderJournal() {
+    const pinSection    = document.getElementById("journalPinSection");
+    const contentSection = document.getElementById("journalContent");
+    if (journalLocked) {
+      pinSection.classList.remove("hidden");
+      contentSection.classList.add("hidden");
+    } else {
+      pinSection.classList.add("hidden");
+      contentSection.classList.remove("hidden");
+      loadAndRenderEntries();
+    }
+  }
+
+  async function checkJournalPin() {
+    const input   = document.getElementById("journalPinInput");
+    const entered = input.value;
+    const stored  = profile.journalPin || "";
+    if (!stored) {
+      // İlk kez pin belirleniyor
+      if (entered.length < 4) { showToast("En az 4 karakter gir", "warn"); return; }
+      profile.journalPin = entered;
+      await saveUserProfile({ journalPin: entered });
+      input.value   = "";
+      journalLocked = false;
+      renderJournal();
+    } else {
+      if (entered === stored) {
+        input.value   = "";
+        journalLocked = false;
+        renderJournal();
+      } else {
+        showToast("Yanlış şifre", "error");
+        input.value = "";
+      }
+    }
+  }
+
+  async function loadAndRenderEntries() {
+    const entries = await loadJournalEntries();
+    const list    = document.getElementById("journalEntries");
+    if (!entries.length) {
+      list.innerHTML = `<p class="text-sm muted text-center py-6">Henüz günlük girişin yok 📖</p>`;
+      return;
+    }
+    list.innerHTML = entries.map(e => `
+      <div class="journal-entry">
+        <p class="entry-text">${escHtml(e.text)}</p>
+        <div class="entry-meta">
+          <span>${e.createdAt?.toDate ? fmtDate(e.createdAt.toDate()) : ""}</span>
+          <button onclick="window._deleteJournal('${e.id}')" class="del-link">Sil</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function saveJournalEntry_() {
+    const ta = document.getElementById("journalInput");
+    const text = ta.value.trim();
+    if (!text) return;
+    await saveJournalEntry(text);
+    ta.value = "";
+    loadAndRenderEntries();
+    showToast("Günlük kaydedildi 🔐");
+  }
+
+  window._deleteJournal = async (id) => {
+    await deleteJournalEntry(id);
+    loadAndRenderEntries();
+  };
+
+  /* ── Brain Dump ── */
+  function toggleBrainDump() {
+    const panel = document.getElementById("brainDumpPanel");
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) {
+      renderBrainDumps();
+      document.getElementById("brainDumpText").focus();
+    }
+  }
+
+  async function sendBrainDump() {
+    const ta   = document.getElementById("brainDumpText");
+    const text = ta.value.trim();
+    if (!text) return;
+    await saveBrainDump(text);
+    ta.value = "";
+    renderBrainDumps();
+    showToast("Beyin boşaltıldı 🧠✨");
+  }
+
+  async function renderBrainDumps() {
+    const notes = await loadBrainDumps();
+    const list  = document.getElementById("brainDumpList");
+    if (!notes.length) {
+      list.innerHTML = `<p class="text-xs muted">Henüz not yok.</p>`;
+      return;
+    }
+    list.innerHTML = notes.map(n => `
+      <div class="dump-item">
+        <span>${escHtml(n.text)}</span>
+        <button onclick="window._deleteDump('${n.id}')" class="del-link">✕</button>
+      </div>
+    `).join("");
+  }
+
+  window._deleteDump = async (id) => {
+    await deleteBrainDump(id);
+    renderBrainDumps();
+  };
+
+  /* ── Kendini Tanı Soruları ── */
+  const quizQuestions = [
+    { key: "focusTime",   label: "Günün en verimli saati?",            opts: ["Sabah","Öğlen","Öğleden Sonra","Akşam","Gece"] },
+    { key: "motivation",  label: "Seni en çok ne motive eder?",        opts: ["Ödüller","Rekabet","Merak","Yaratıcılık","Sosyal onay"] },
+    { key: "distraction", label: "Dikkatini en çok ne dağıtır?",       opts: ["Telefon","Sesler","Yorgunluk","Açlık","İç düşünceler"] },
+    { key: "taskStyle",   label: "Görevlere nasıl yaklaşırsın?",       opts: ["Planlı adımlar","Bir anda tek şey","Çoklu iş","Son dakika"] },
+    { key: "recharge",    label: "Nasıl enerji toplarsın?",            opts: ["Yalnız kalarak","Sosyalleşerek","Hareket ederek","Uyuyarak"] },
+  ];
+
+  function loadQuiz() {
+    const wrap = document.getElementById("quizWrap");
+    wrap.innerHTML = quizQuestions.map(q => `
+      <div class="quiz-q">
+        <label class="quiz-label">${q.label}</label>
+        <div class="quiz-opts">
+          ${q.opts.map(opt => `
+            <button class="quiz-opt ${profile.quiz?.[q.key] === opt ? "selected" : ""}"
+                    data-key="${q.key}" data-val="${opt}"
+                    onclick="window._pickQuiz('${q.key}','${opt}',this)">
+              ${opt}
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  window._pickQuiz = (key, val, btn) => {
+    btn.closest(".quiz-opts").querySelectorAll(".quiz-opt").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    if (!profile.quiz) profile.quiz = {};
+    profile.quiz[key] = val;
+  };
+
+  async function saveQuiz() {
+    await saveUserProfile({ quiz: profile.quiz || {} });
+    showToast("Profil soruları kaydedildi 🎉");
+    loadQuiz();
+  }
+
+  /* ── Tema & Renk ── */
+  function applyTheme(theme) {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    profile.theme = theme;
+  }
+
+  const accentMap = {
+    indigo: { light: "#6366f1", dark: "#818cf8", bg: "#eef2ff", ring: "#c7d2fe" },
+    violet: { light: "#7c3aed", dark: "#a78bfa", bg: "#f5f3ff", ring: "#ddd6fe" },
+    rose:   { light: "#e11d48", dark: "#fb7185", bg: "#fff1f2", ring: "#fecdd3" },
+    teal:   { light: "#0d9488", dark: "#2dd4bf", bg: "#f0fdfa", ring: "#99f6e4" },
+    amber:  { light: "#d97706", dark: "#fbbf24", bg: "#fffbeb", ring: "#fde68a" },
+  };
+
+  function applyAccent(key) {
+    const a  = accentMap[key] || accentMap.indigo;
+    const r  = document.documentElement.style;
+    r.setProperty("--accent",      a.light);
+    r.setProperty("--accent-dark", a.dark);
+    r.setProperty("--accent-bg",   a.bg);
+    r.setProperty("--accent-ring", a.ring);
+    profile.accent = key;
+  }
+
+  /* ── Yardımcı ── */
+  function escHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  function fmtDate(d) {
+    return d.toLocaleString("tr-TR", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" });
+  }
+  function checkIcon()      { return `<svg viewBox="0 0 20 20" fill="currentColor" width="20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`; }
+  function emptyCheckIcon() { return `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="20"><circle cx="10" cy="10" r="8"/></svg>`; }
+  function firebaseErrorMsg(code) {
+    const m = { "auth/email-already-in-use":"Bu e-posta zaten kayıtlı.", "auth/invalid-email":"Geçersiz e-posta.", "auth/wrong-password":"Şifre yanlış.", "auth/user-not-found":"Kullanıcı bulunamadı.", "auth/weak-password":"Şifre en az 6 karakter olmalı." };
+    return m[code] || "Bir hata oluştu: " + code;
+  }
+
+  function showToast(msg, type="ok") {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className   = `toast show ${type}`;
+    setTimeout(() => t.classList.remove("show"), 2800);
+  }
+</script>
+
+<!-- canvas-confetti -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+<style>
+/* ═══════ CSS VARIABLES ═══════ */
+:root {
+  --accent:      #6366f1;
+  --accent-dark: #818cf8;
+  --accent-bg:   #eef2ff;
+  --accent-ring: #c7d2fe;
+  --bg:          #f8f7ff;
+  --surface:     #ffffff;
+  --surface2:    #f3f4f6;
+  --border:      #e5e7eb;
+  --text:        #1f2937;
+  --text-muted:  #6b7280;
+  --shadow:      0 2px 12px rgba(0,0,0,.07);
+  --radius:      14px;
+  --fab-size:    52px;
+}
+html.dark {
+  --bg:         #0f0e17;
+  --surface:    #1a1826;
+  --surface2:   #252336;
+  --border:     #2e2b47;
+  --text:       #e9e4ff;
+  --text-muted: #9e97c4;
+  --shadow:     0 2px 16px rgba(0,0,0,.4);
+}
+
+/* ═══════ RESET ═══════ */
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+html { font-size:16px; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  transition: background .3s, color .3s;
+}
+a { color: var(--accent); }
+button { cursor:pointer; border:none; background:none; font-family:inherit; }
+input, textarea {
+  font-family:inherit; color:var(--text);
+  background:var(--surface2); border:1.5px solid var(--border);
+  border-radius:10px; padding:.6rem .85rem; width:100%;
+  transition:border .2s;
+}
+input:focus, textarea:focus {
+  outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring);
+}
+textarea { resize:vertical; min-height:90px; }
+.muted { color: var(--text-muted); }
+
+/* ═══════ AUTH SCREEN ═══════ */
+#authScreen {
+  display:flex; align-items:center; justify-content:center;
+  min-height:100dvh; padding:1.5rem;
+  background: linear-gradient(135deg, var(--bg) 0%, var(--accent-bg) 100%);
+}
+.auth-card {
+  background:var(--surface); border-radius:22px; padding:2.2rem;
+  box-shadow: var(--shadow); width:100%; max-width:420px;
+}
+.auth-logo { font-size:2rem; text-align:center; margin-bottom:.4rem; }
+.auth-title { font-size:1.4rem; font-weight:700; text-align:center; margin-bottom:1.4rem; }
+.auth-field { margin-bottom:1rem; }
+.auth-field label { display:block; font-size:.82rem; font-weight:600; margin-bottom:.4rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
+.btn-primary {
+  background:var(--accent); color:#fff; border-radius:12px;
+  padding:.75rem 1.4rem; font-weight:700; font-size:1rem;
+  width:100%; transition:opacity .2s, transform .1s;
+}
+.btn-primary:hover { opacity:.9; }
+.btn-primary:active { transform:scale(.97); }
+.btn-ghost { background:transparent; color:var(--accent); font-size:.88rem; margin-top:1rem; width:100%; text-align:center; }
+.auth-error { color:#ef4444; font-size:.84rem; margin-top:.5rem; min-height:1.1rem; }
+
+/* ═══════ APP LAYOUT ═══════ */
+#appScreen {
+  display:flex; flex-direction:column; min-height:100dvh;
+}
+/* Header */
+.app-header {
+  background:var(--surface); border-bottom:1.5px solid var(--border);
+  padding:.75rem 1.2rem; display:flex; align-items:center; gap:.75rem;
+  position:sticky; top:0; z-index:50;
+}
+.header-logo { font-size:1.2rem; font-weight:800; color:var(--accent); flex:1; }
+.header-avatar {
+  width:36px; height:36px; border-radius:50%; display:flex;
+  align-items:center; justify-content:center; color:#fff;
+  font-weight:700; font-size:.9rem; flex-shrink:0;
+}
+.icon-btn-header {
+  width:36px; height:36px; border-radius:10px; display:flex;
+  align-items:center; justify-content:center;
+  background:var(--surface2); color:var(--text); font-size:1rem;
+  transition:background .2s;
+}
+.icon-btn-header:hover { background:var(--accent-bg); color:var(--accent); }
+
+/* Nav tabs */
+.tabs {
+  background:var(--surface); border-bottom:1.5px solid var(--border);
+  display:flex; overflow-x:auto; gap:0;
+  scrollbar-width:none; -webkit-overflow-scrolling:touch;
+}
+.tabs::-webkit-scrollbar { display:none; }
+.tab-btn {
+  padding:.65rem 1.1rem; font-size:.82rem; font-weight:600;
+  color:var(--text-muted); white-space:nowrap; border-bottom:2.5px solid transparent;
+  transition:color .2s, border-color .2s; flex-shrink:0;
+}
+.tab-btn:hover { color:var(--text); }
+.tab-active { color:var(--accent) !important; border-bottom-color:var(--accent) !important; }
+
+/* Main content */
+.app-main { flex:1; padding:1.2rem; max-width:700px; width:100%; margin:0 auto; }
+
+/* ═══════ CARDS ═══════ */
+.card {
+  background:var(--surface); border-radius:var(--radius);
+  padding:1.25rem; box-shadow:var(--shadow); margin-bottom:1rem;
+}
+.card-title {
+  font-size:1rem; font-weight:700; margin-bottom:1rem;
+  display:flex; align-items:center; gap:.5rem;
+}
+.card-title span { font-size:1.1rem; }
+
+/* ═══════ TASKS ═══════ */
+#taskList { display:flex; flex-direction:column; gap:.5rem; }
+.task-item {
+  display:flex; align-items:center; gap:.7rem;
+  background:var(--surface2); border-radius:10px; padding:.6rem .75rem;
+  border:1.5px solid var(--border); transition:opacity .2s, background .2s;
+  user-select:none;
+}
+.task-item.done { opacity:.55; }
+.task-item.drag-over { border-color:var(--accent); background:var(--accent-bg); }
+.check-btn { color:var(--accent); flex-shrink:0; display:flex; align-items:center; }
+.task-item.done .check-btn { color:var(--accent); }
+.task-text { flex:1; font-size:.93rem; }
+.task-item.done .task-text { text-decoration:line-through; color:var(--text-muted); }
+.task-actions { display:flex; gap:.25rem; flex-shrink:0; }
+.icon-btn { width:28px; height:28px; border-radius:7px; font-size:.85rem; color:var(--text-muted); display:flex; align-items:center; justify-content:center; }
+.icon-btn:hover { background:var(--border); color:var(--text); }
+.icon-btn.del:hover { background:#fee2e2; color:#ef4444; }
+
+/* Task input row */
+.task-input-row { display:flex; gap:.6rem; margin-bottom:1rem; }
+.task-input-row input { flex:1; }
+.btn-add {
+  background:var(--accent); color:#fff; padding:.65rem 1rem;
+  border-radius:10px; font-size:.9rem; font-weight:700; flex-shrink:0;
+  transition:opacity .2s;
+}
+.btn-add:hover { opacity:.88; }
+
+/* ═══════ REPORT ═══════ */
+.report-field { margin-bottom:.9rem; }
+.report-field label { display:block; font-size:.82rem; font-weight:600; color:var(--text-muted); margin-bottom:.35rem; text-transform:uppercase; letter-spacing:.04em; }
+
+/* ═══════ JOURNAL ═══════ */
+.journal-entry {
+  background:var(--surface2); border-radius:10px; padding:.85rem 1rem;
+  margin-bottom:.65rem; border-left:3px solid var(--accent);
+}
+.entry-text { font-size:.9rem; white-space:pre-wrap; word-break:break-word; }
+.entry-meta { display:flex; justify-content:space-between; align-items:center; margin-top:.5rem; font-size:.75rem; color:var(--text-muted); }
+.del-link { color:#ef4444; background:none; font-size:.75rem; }
+.del-link:hover { text-decoration:underline; }
+
+/* ═══════ QUIZ ═══════ */
+.quiz-q { margin-bottom:1.2rem; }
+.quiz-label { display:block; font-size:.9rem; font-weight:600; margin-bottom:.5rem; }
+.quiz-opts { display:flex; flex-wrap:wrap; gap:.4rem; }
+.quiz-opt {
+  padding:.38rem .75rem; border-radius:999px; font-size:.8rem; font-weight:500;
+  background:var(--surface2); border:1.5px solid var(--border); color:var(--text-muted);
+  transition:all .15s;
+}
+.quiz-opt:hover { border-color:var(--accent); color:var(--accent); }
+.quiz-opt.selected { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* ═══════ PROFILE ═══════ */
+.avatar-circle {
+  width:34px; height:34px; border-radius:50%; flex-shrink:0;
+  transition:transform .15s;
+}
+.avatar-circle:hover { transform:scale(1.12); }
+#avatarPreview {
+  width:60px; height:60px; border-radius:50%; display:flex;
+  align-items:center; justify-content:center; color:#fff;
+  font-size:1.5rem; font-weight:700; margin:0 auto .8rem;
+}
+.accent-btn {
+  width:28px; height:28px; border-radius:50%; flex-shrink:0;
+  border:2.5px solid transparent; transition:transform .15s;
+}
+.accent-btn:hover { transform:scale(1.15); border-color:var(--text); }
+
+/* ═══════ BRAIN DUMP FAB ═══════ */
+#brainDumpFab {
+  position:fixed; bottom:1.5rem; right:1.5rem; z-index:100;
+  width:var(--fab-size); height:var(--fab-size); border-radius:50%;
+  background:var(--accent); color:#fff; font-size:1.4rem;
+  box-shadow:0 4px 20px rgba(0,0,0,.25);
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .2s, box-shadow .2s;
+}
+#brainDumpFab:hover { transform:scale(1.08); box-shadow:0 6px 24px rgba(0,0,0,.3); }
+
+#brainDumpPanel {
+  position:fixed; bottom:calc(var(--fab-size) + 1.8rem); right:1.5rem;
+  z-index:99; width:min(340px, calc(100vw - 2rem));
+  background:var(--surface); border-radius:18px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18); padding:1.1rem;
+  border:1.5px solid var(--border);
+}
+#brainDumpPanel h3 { font-size:.92rem; font-weight:700; margin-bottom:.7rem; display:flex; justify-content:space-between; }
+.close-x { font-size:1rem; color:var(--text-muted); }
+.close-x:hover { color:var(--text); }
+#brainDumpList { max-height:160px; overflow-y:auto; margin-bottom:.7rem; }
+.dump-item {
+  display:flex; justify-content:space-between; align-items:flex-start;
+  gap:.5rem; font-size:.82rem; padding:.35rem 0;
+  border-bottom:1px solid var(--border);
+}
+.dump-item:last-child { border-bottom:none; }
+.btn-send {
+  background:var(--accent); color:#fff; border-radius:9px;
+  padding:.55rem 1rem; font-size:.85rem; font-weight:700; margin-top:.4rem;
+  width:100%; transition:opacity .2s;
+}
+.btn-send:hover { opacity:.88; }
+
+/* ═══════ TOAST ═══════ */
+.toast {
+  position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--surface); color:var(--text); border:1.5px solid var(--border);
+  padding:.6rem 1.2rem; border-radius:999px; font-size:.85rem; font-weight:600;
+  box-shadow:var(--shadow); opacity:0; pointer-events:none;
+  transition:opacity .3s, transform .3s; z-index:200; white-space:nowrap;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+.toast.error { border-color:#ef4444; color:#ef4444; }
+.toast.warn  { border-color:#f59e0b; color:#f59e0b; }
+
+/* ═══════ MISC ═══════ */
+.separator { height:1.5px; background:var(--border); margin:1rem 0; }
+.btn-secondary {
+  background:var(--accent-bg); color:var(--accent); border:1.5px solid var(--accent-ring);
+  border-radius:10px; padding:.6rem 1rem; font-size:.88rem; font-weight:700;
+  transition:background .2s;
+}
+.btn-secondary:hover { background:var(--accent-ring); }
+.full-btn { width:100%; }
+.pin-hint { font-size:.78rem; color:var(--text-muted); margin-top:.4rem; }
+.hidden { display:none !important; }
+
+/* Scroll */
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+
+@media (max-width:480px) {
+  .app-main { padding:.9rem; }
+  .task-actions .icon-btn { width:24px; height:24px; font-size:.75rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     AUTH EKRANI
+═══════════════════════════════════════ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">🧠</div>
+    <div id="authTitle" class="auth-title">Giriş Yap</div>
+    <form id="authForm">
+      <div id="authNameWrap" class="auth-field" style="display:none">
+        <label>İsmin</label>
+        <input id="authName" type="text" placeholder="Adın Nedir?" autocomplete="name" />
+      </div>
+      <div class="auth-field">
+        <label>E-posta</label>
+        <input id="authEmail" type="email" placeholder="ornek@mail.com" required autocomplete="email" />
+      </div>
+      <div class="auth-field">
+        <label>Şifre</label>
+        <input id="authPass" type="password" placeholder="••••••" required autocomplete="current-password" />
+      </div>
+      <div id="authError" class="auth-error"></div>
+      <button type="submit" id="authSubmitBtn" class="btn-primary">Giriş Yap</button>
+      <button type="button" id="authToggleMode" class="btn-ghost" data-mode="login">
+        Hesabın yok mu? Kayıt ol
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ANA UYGULAMA
+═══════════════════════════════════════ -->
+<div id="appScreen" style="display:none; flex-direction:column;">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-logo">🧠 FokusADHD</div>
+    <button id="themeToggle" class="icon-btn-header" title="Karanlık/Aydınlık mod" aria-label="Tema değiştir">☀️</button>
+    <div id="headerAvatar" class="header-avatar" style="background:#a78bfa">?</div>
+    <button id="logoutBtn" class="icon-btn-header" title="Çıkış" aria-label="Çıkış yap">🚪</button>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tabs" role="tablist">
+    <button class="tab-btn tab-active" data-tab="tasks"  role="tab">✅ Görevler</button>
+    <button class="tab-btn" data-tab="report"            role="tab">📊 Rapor</button>
+    <button class="tab-btn" data-tab="journal"           role="tab">🔐 Günlük</button>
+    <button class="tab-btn" data-tab="quiz"              role="tab">🧬 Kendini Tanı</button>
+    <button class="tab-btn" data-tab="profile"           role="tab">👤 Profil</button>
+  </nav>
+
+  <!-- Main -->
+  <main class="app-main">
+
+    <!-- ── GÖREVLER ── -->
+    <div class="tab-panel" data-panel="tasks">
+      <div class="card">
+        <div class="card-title"><span>✅</span> Bugünün Görevleri</div>
+        <div class="task-input-row">
+          <input id="taskInput" type="text" placeholder="Yeni görev ekle..." autocomplete="off" />
+          <button id="addTaskBtn" class="btn-add">+ Ekle</button>
+        </div>
+        <div id="taskList"></div>
+      </div>
+      <p class="muted" style="font-size:.78rem; text-align:center; padding:.5rem 0;">
+        Görev tamamlandığında 🎉 konfeti patlar — dopamin garantili!
+      </p>
+    </div>
+
+    <!-- ── RAPOR ── -->
+    <div class="tab-panel hidden" data-panel="report">
+      <div class="card">
+        <div class="card-title"><span>📊</span> Günlük Özet</div>
+        <div class="report-field">
+          <label>📅 Tarih</label>
+          <input id="reportDate" type="date" />
+        </div>
+        <div class="report-field">
+          <label>😊 Bugün nasıl geçti?</label>
+          <textarea id="reportHow" placeholder="Enerji seviyem, ruh halim..."></textarea>
+        </div>
+        <div class="report-field">
+          <label>🏆 Neleri başardım?</label>
+          <textarea id="reportAchieved" placeholder="Büyük ya da küçük, her başarı sayılır!"></textarea>
+        </div>
+        <div class="report-field">
+          <label>⚡ Beni ne zorladı?</label>
+          <textarea id="reportHard" placeholder="Yarın daha iyi olmak için..."></textarea>
+        </div>
+        <button id="saveReportBtn" class="btn-primary" style="margin-top:.5rem">💾 Kaydet</button>
+      </div>
+    </div>
+
+    <!-- ── GÜNLÜK ── -->
+    <div class="tab-panel hidden" data-panel="journal">
+      <div class="card">
+        <div class="card-title"><span>🔐</span> Şifreli Günlük</div>
+
+        <!-- Kilit ekranı -->
+        <div id="journalPinSection">
+          <p class="muted" style="font-size:.88rem; margin-bottom:.9rem;">
+            Günlüğüne erişmek için şifreni gir. İlk kez giriyorsan yeni şifren bu olacak.
+          </p>
+          <input id="journalPinInput" type="password" placeholder="Günlük şifresi..." autocomplete="off" />
+          <p class="pin-hint">İpucu: Hesap şifrenle aynı olmak zorunda değil.</p>
+          <button id="journalUnlockBtn" class="btn-primary" style="margin-top:.9rem">🔓 Aç</button>
+        </div>
+
+        <!-- İçerik -->
+        <div id="journalContent" class="hidden">
+          <textarea id="journalInput" placeholder="İçini dök... Kimse okumayacak 💜"></textarea>
+          <div style="display:flex; gap:.6rem; margin-top:.7rem;">
+            <button id="saveJournalBtn" class="btn-primary" style="flex:1">💾 Kaydet</button>
+            <button id="journalLockBtn" class="btn-secondary">🔒 Kilitle</button>
+          </div>
+          <div class="separator"></div>
+          <div id="journalEntries"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── KENDİNİ TANI ── -->
+    <div class="tab-panel hidden" data-panel="quiz">
+      <div class="card">
+        <div class="card-title"><span>🧬</span> Kendini Tanı</div>
+        <p class="muted" style="font-size:.85rem; margin-bottom:1.1rem;">
+          Bu cevaplar sana özel bir DEHB profili oluşturmana yardımcı olur.
+        </p>
+        <div id="quizWrap"></div>
+        <button id="saveQuizBtn" class="btn-primary full-btn" style="margin-top:.5rem">✓ Kaydet</button>
+      </div>
+    </div>
+
+    <!-- ── PROFİL ── -->
+    <div class="tab-panel hidden" data-panel="profile">
+      <div class="card">
+        <div class="card-title"><span>👤</span> Profilim</div>
+        <div id="avatarPreview"><span id="avatarInitial">?</span></div>
+        <div style="display:flex; justify-content:center; gap:.55rem; margin-bottom:1.2rem; flex-wrap:wrap;" id="avatarChoices"></div>
+
+        <div class="report-field">
+          <label>İsim</label>
+          <input id="profileName" type="text" placeholder="Adın" />
+        </div>
+        <div class="report-field">
+          <label>Renk Teması</label>
+          <div style="display:flex; gap:.5rem; margin-top:.4rem; flex-wrap:wrap;">
+            <button class="accent-btn" data-accent="indigo" style="background:#6366f1"></button>
+            <button class="accent-btn" data-accent="violet" style="background:#7c3aed"></button>
+            <button class="accent-btn" data-accent="rose"   style="background:#e11d48"></button>
+            <button class="accent-btn" data-accent="teal"   style="background:#0d9488"></button>
+            <button class="accent-btn" data-accent="amber"  style="background:#d97706"></button>
+          </div>
+        </div>
+        <button id="saveProfileBtn" class="btn-primary full-btn">💾 Profili Kaydet</button>
+      </div>
+    </div>
+
+  </main><!-- /app-main -->
+</div><!-- /appScreen -->
+
+<!-- ═══════ BRAIN DUMP FAB ═══════ -->
+<button id="brainDumpFab" aria-label="Beyin Boşalt" title="Aklındakileri hemen fırlat!">🧠</button>
+
+<div id="brainDumpPanel" class="hidden">
+  <h3>
+    🧠 Beyin Boşalt
+    <button id="closeBrainDump" class="close-x" aria-label="Kapat">✕</button>
+  </h3>
+  <div id="brainDumpList"><p class="text-xs muted">Henüz not yok.</p></div>
+  <textarea id="brainDumpText" placeholder="Aklına gelen her şeyi buraya fırlat... (Ctrl+Enter)" rows="3"></textarea>
+  <button id="sendBrainDump" class="btn-send">🚀 Fırlat!</button>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast" role="alert"></div>
+
+</body>
+</html>
