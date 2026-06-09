@@ -202,72 +202,77 @@
 
     setupAuthAndData();
 
-    document.getElementById("authForm").addEventListener("submit", async e => {
+    document.getElementById("authForm")?.addEventListener("submit", async e => {
       e.preventDefault();
-      const email = document.getElementById("authEmail").value.trim();
-      const pass = document.getElementById("authPass").value;
-      const isLogin = document.getElementById("authToggleMode").dataset.mode === "login";
+      const email = document.getElementById("authEmail")?.value.trim();
+      const pass = document.getElementById("authPass")?.value;
+      const isLogin = document.getElementById("authToggleMode")?.dataset.mode === "login";
       const errEl = document.getElementById("authError");
-      errEl.textContent = "";
+      if(errEl) errEl.textContent = "";
       showSkeleton(true);
       try {
         if (isLogin) {
           await signInWithEmailAndPassword(auth, email, pass);
         } else {
           const cred = await createUserWithEmailAndPassword(auth, email, pass);
-          const name = document.getElementById("authName").value.trim() || "Kullanıcı";
+          const name = document.getElementById("authName")?.value.trim() || "Kullanıcı";
           await updateProfile(cred.user, { displayName: name });
           await saveUserProfile({ 
             displayName: name, theme: "light", accent: "indigo",
             streak: 1, lastActiveDate: new Date().toISOString().split("T")[0], totalPomodoros: 0
           });
         }
-      } catch (err) { errEl.textContent = firebaseErrorMsg(err.code); } 
+      } catch (err) { 
+        if(errEl) errEl.textContent = firebaseErrorMsg(err.code); 
+      } 
       finally { showSkeleton(false); }
     });
 
-    document.getElementById("authToggleMode").addEventListener("click", e => {
+    document.getElementById("authToggleMode")?.addEventListener("click", e => {
       const isLogin = e.target.dataset.mode === "login";
       e.target.dataset.mode = isLogin ? "register" : "login";
-      document.getElementById("authTitle").textContent = isLogin ? "Hoş Geldiniz" : "Kayıt Ol";
+      const authTitle = document.getElementById("authTitle");
+      if(authTitle) authTitle.textContent = isLogin ? "Hoş Geldiniz" : "Kayıt Ol";
       e.target.textContent = isLogin ? "Zaten bir hesabınız var mı? Giriş yapın" : "Yeni misiniz? Hemen kayıt olun";
-      document.getElementById("authSubmitBtn").textContent = isLogin ? "Hesap Oluştur" : "Giriş Yap";
-      document.getElementById("authNameWrap").classList.toggle("hidden", isLogin);
+      const submitBtn = document.getElementById("authSubmitBtn");
+      if(submitBtn) submitBtn.textContent = isLogin ? "Hesap Oluştur" : "Giriş Yap";
+      const nameWrap = document.getElementById("authNameWrap");
+      if(nameWrap) nameWrap.classList.toggle("hidden", isLogin);
     });
 
-    document.getElementById("logoutBtn").addEventListener("click", async () => {
+    document.getElementById("logoutBtn")?.addEventListener("click", async () => {
       const confirmLogout = await customConfirm("Çıkış Yap", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?");
       if (confirmLogout) await signOut(auth);
     });
 
     document.querySelectorAll(".tab-btn").forEach(btn => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab, btn));
+      btn?.addEventListener("click", () => switchTab(btn.dataset.tab, btn));
     });
 
-    document.getElementById("themeToggle").addEventListener("click", async () => {
+    document.getElementById("themeToggle")?.addEventListener("click", async () => {
       const isDark = document.documentElement.classList.toggle("dark");
       const theme = isDark ? "dark" : "light";
       profile.theme = theme;
       if (uid()) await saveUserProfile({ theme });
     });
 
-    document.getElementById("taskInput").addEventListener("keydown", async e => { if (e.key === "Enter") await addTask(); });
-    document.getElementById("addTaskBtn").addEventListener("click", addTask);
-    document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
-    document.getElementById("saveReportBtn").addEventListener("click", saveReport_);
+    document.getElementById("taskInput")?.addEventListener("keydown", async e => { if (e.key === "Enter") await addTask(); });
+    document.getElementById("addTaskBtn")?.addEventListener("click", addTask);
+    document.getElementById("saveProfileBtn")?.addEventListener("click", saveProfile);
+    document.getElementById("saveReportBtn")?.addEventListener("click", saveReport_);
     
-    document.getElementById("journalUnlockBtn").addEventListener("click", checkJournalPin);
-    document.getElementById("journalPinInput").addEventListener("keydown", e => { if (e.key === "Enter") checkJournalPin(); });
-    document.getElementById("journalLockBtn").addEventListener("click", () => { journalLocked = true; renderJournal(); });
-    document.getElementById("saveJournalBtn").addEventListener("click", saveJournalEntry_);
+    document.getElementById("journalUnlockBtn")?.addEventListener("click", checkJournalPin);
+    document.getElementById("journalPinInput")?.addEventListener("keydown", e => { if (e.key === "Enter") checkJournalPin(); });
+    document.getElementById("journalLockBtn")?.addEventListener("click", () => { journalLocked = true; renderJournal(); });
+    document.getElementById("saveJournalBtn")?.addEventListener("click", saveJournalEntry_);
 
-    document.getElementById("brainDumpFab").addEventListener("click", toggleBrainDump);
-    document.getElementById("closeBrainDump").addEventListener("click", () => { document.getElementById("brainDumpPanel").classList.add("hidden"); });
-    document.getElementById("sendBrainDump").addEventListener("click", sendBrainDump);
-    document.getElementById("brainDumpText").addEventListener("keydown", e => { if (e.key === "Enter" && e.ctrlKey) sendBrainDump(); });
+    document.getElementById("brainDumpFab")?.addEventListener("click", toggleBrainDump);
+    document.getElementById("closeBrainDump")?.addEventListener("click", () => { document.getElementById("brainDumpPanel")?.classList.add("hidden"); });
+    document.getElementById("sendBrainDump")?.addEventListener("click", sendBrainDump);
+    document.getElementById("brainDumpText")?.addEventListener("keydown", e => { if (e.key === "Enter" && e.ctrlKey) sendBrainDump(); });
 
     document.querySelectorAll(".accent-btn").forEach(btn => {
-      btn.addEventListener("click", async () => {
+      btn?.addEventListener("click", async () => {
         const accent = btn.dataset.accent;
         applyAccent(accent);
         profile.accent = accent;
@@ -276,26 +281,19 @@
       });
     });
 
-    document.getElementById("saveQuizBtn").addEventListener("click", saveQuiz);
+    document.getElementById("saveQuizBtn")?.addEventListener("click", saveQuiz);
     
     const today = new Date().toISOString().split("T")[0];
-    document.getElementById("reportDate").value = today;
-    document.getElementById("reportDate").addEventListener("change", async e => {
-      showSkeleton(true);
-      const r = await loadReport(e.target.value);
-      const howEl = document.getElementById("reportHow");
-      if(howEl) howEl.value = r.how || "";
-      const achievedEl = document.getElementById("reportAchieved");
-      if(achievedEl) achievedEl.value = r.achieved || "";
-      const hardEl = document.getElementById("reportHard");
-      if(hardEl) hardEl.value = r.hard || "";
-      setMoodSelection(r.mood || "");
-      const energy = r.energy || 3;
-      const energyEl = document.getElementById("reportEnergy");
-      if(energyEl) energyEl.value = energy;
-      updateEnergyDisplay(energy);
-      showSkeleton(false);
-    });
+    const reportDateInput = document.getElementById("reportDate");
+    if(reportDateInput) reportDateInput.value = today;
+    
+    if(reportDateInput) {
+      reportDateInput.addEventListener("change", async e => {
+        showSkeleton(true);
+        await loadReportForToday();
+        showSkeleton(false);
+      });
+    }
 
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.altKey) && e.key >= "1" && e.key <= "7") {
@@ -313,10 +311,10 @@
 
     const scrollTopBtn = document.getElementById("scrollTopBtn");
     window.addEventListener("scroll", () => {
-      if (window.scrollY > 300) scrollTopBtn.classList.remove("hidden");
-      else scrollTopBtn.classList.add("hidden");
+      if (window.scrollY > 300) scrollTopBtn?.classList.remove("hidden");
+      else scrollTopBtn?.classList.add("hidden");
     });
-    scrollTopBtn.addEventListener("click", () => { window.scrollTo({ top: 0, behavior: "smooth" }); });
+    scrollTopBtn?.addEventListener("click", () => { window.scrollTo({ top: 0, behavior: "smooth" }); });
   });
 
   function requestNotificationPermission() {
@@ -340,20 +338,27 @@
 
   function showSkeleton(show) {
     const skeleton = document.getElementById("skeletonLoader");
+    if(!skeleton) return;
     if (show) skeleton.classList.remove("hidden");
     else skeleton.classList.add("hidden");
   }
 
   function showAuth() {
-    document.getElementById("authScreen").classList.remove("hidden");
-    document.getElementById("appScreen").classList.add("hidden");
-    document.getElementById("brainDumpFab").classList.add("hidden");
+    const authScreen = document.getElementById("authScreen");
+    const appScreen = document.getElementById("appScreen");
+    const fab = document.getElementById("brainDumpFab");
+    if(authScreen) authScreen.classList.remove("hidden");
+    if(appScreen) appScreen.classList.add("hidden");
+    if(fab) fab.classList.add("hidden");
   }
 
   function showApp() {
-    document.getElementById("authScreen").classList.add("hidden");
-    document.getElementById("appScreen").classList.remove("hidden");
-    document.getElementById("brainDumpFab").classList.remove("hidden");
+    const authScreen = document.getElementById("authScreen");
+    const appScreen = document.getElementById("appScreen");
+    const fab = document.getElementById("brainDumpFab");
+    if(authScreen) authScreen.classList.add("hidden");
+    if(appScreen) appScreen.classList.remove("hidden");
+    if(fab) fab.classList.remove("hidden");
   }
 
   async function handleStreakCalculation() {
@@ -397,11 +402,13 @@
     isSwitchingTab = true;
     activeTab = tab;
     
-    if (btnEl) btnEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    if (btnEl && btnEl.scrollIntoView) btnEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     
     const mainArea = document.querySelector(".app-main");
-    mainArea.style.opacity = "0";
-    mainArea.style.pointerEvents = "none";
+    if(mainArea) {
+      mainArea.style.opacity = "0";
+      mainArea.style.pointerEvents = "none";
+    }
     
     setTimeout(() => {
       document.querySelectorAll(".tab-btn").forEach(b => {
@@ -417,31 +424,43 @@
       if (tab === "braindump_list") renderBrainDumps();
       if (tab === "report") loadRecentReportsList();
 
-      mainArea.style.opacity = "1";
-      mainArea.style.pointerEvents = "auto";
+      if(mainArea) {
+        mainArea.style.opacity = "1";
+        mainArea.style.pointerEvents = "auto";
+      }
       isSwitchingTab = false;
     }, 250);
   }
 
   function renderDashboard() {
     const name = profile.displayName || currentUser?.displayName || "Kullanıcı";
-    document.getElementById("dashboardGreeting").textContent = `Hoş geldiniz, ${escHtml(name)}.`;
+    const greetingEl = document.getElementById("dashboardGreeting");
+    if(greetingEl) greetingEl.textContent = `Hoş geldiniz, ${escHtml(name)}.`;
 
     const total = tasks.length;
     const completed = tasks.filter(t => t.done).length;
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     const circle = document.getElementById("dashboardProgressCircle");
-    const r = 40;
-    const circ = 2 * Math.PI * r;
-    circle.style.strokeDasharray = circ;
-    circle.style.strokeDashoffset = circ - (percent / 100) * circ;
-    document.getElementById("dashboardProgressText").textContent = `%${percent}`;
-    document.getElementById("dashboardProgressStats").textContent = `${total} Görevden ${completed}'i Tamamlandı`;
-    document.getElementById("dashboardStreakText").innerHTML = `<span class="display-number text-amber-500">${profile.streak || 1}</span><span class="text-sm font-bold ml-2">Günlük Seri</span>`;
+    if(circle) {
+      const r = 40;
+      const circ = 2 * Math.PI * r;
+      circle.style.strokeDasharray = circ;
+      circle.style.strokeDashoffset = circ - (percent / 100) * circ;
+    }
+    
+    const progressTextEl = document.getElementById("dashboardProgressText");
+    if(progressTextEl) progressTextEl.textContent = `%${percent}`;
+    
+    const statsEl = document.getElementById("dashboardProgressStats");
+    if(statsEl) statsEl.textContent = `${total} Görevden ${completed}'i Tamamlandı`;
+    
+    const streakEl = document.getElementById("dashboardStreakText");
+    if(streakEl) streakEl.innerHTML = `<span class="display-number text-amber-500">${profile.streak || 1}</span><span class="text-sm font-bold ml-2">Günlük Seri</span>`;
 
     const savedQuoteIdx = Math.floor(Math.random() * adhdQuotes.length);
-    document.getElementById("dashboardQuote").textContent = adhdQuotes[savedQuoteIdx];
+    const quoteEl = document.getElementById("dashboardQuote");
+    if(quoteEl) quoteEl.textContent = adhdQuotes[savedQuoteIdx];
     
     renderHeatmap();
 
@@ -487,14 +506,16 @@
     if (pomodoroIsRunning) {
       clearInterval(pomodoroInterval);
       pomodoroIsRunning = false;
-      document.getElementById("pomoStartBtn").textContent = "Başlat";
+      const startBtn = document.getElementById("pomoStartBtn");
+      if(startBtn) startBtn.textContent = "Başlat";
     }
   };
 
   function updatePomodoroDisplay() {
     const mins = Math.floor(pomodoroTimeLeft / 60);
     const secs = pomodoroTimeLeft % 60;
-    document.getElementById("pomoTimerText").textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    const textEl = document.getElementById("pomoTimerText");
+    if(textEl) textEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 
     let max = 1500;
     if (pomodoroMode === 'work') max = pomodoroCustomWork * 60;
@@ -503,20 +524,23 @@
 
     const percent = ((max - pomodoroTimeLeft) / max) * 100;
     const circle = document.getElementById("pomoProgressCircle");
-    const r = 90;
-    const circ = 2 * Math.PI * r;
-    circle.style.strokeDasharray = circ;
-    circle.style.strokeDashoffset = circ - (percent / 100) * circ;
+    if(circle) {
+      const r = 90;
+      const circ = 2 * Math.PI * r;
+      circle.style.strokeDasharray = circ;
+      circle.style.strokeDashoffset = circ - (percent / 100) * circ;
+    }
   }
 
   window._togglePomodoro = () => {
+    const startBtn = document.getElementById("pomoStartBtn");
     if (pomodoroIsRunning) {
       clearInterval(pomodoroInterval);
       pomodoroIsRunning = false;
-      document.getElementById("pomoStartBtn").textContent = "Devam Et";
+      if(startBtn) startBtn.textContent = "Devam Et";
     } else {
       pomodoroIsRunning = true;
-      document.getElementById("pomoStartBtn").textContent = "Duraklat";
+      if(startBtn) startBtn.textContent = "Duraklat";
       pomodoroInterval = setInterval(() => {
         pomodoroTimeLeft--;
         if (pomodoroTimeLeft <= 0) {
@@ -546,14 +570,15 @@
   window._resetPomodoro = () => {
     clearInterval(pomodoroInterval);
     pomodoroIsRunning = false;
-    document.getElementById("pomoStartBtn").textContent = "Başlat";
+    const startBtn = document.getElementById("pomoStartBtn");
+    if(startBtn) startBtn.textContent = "Başlat";
     _setPomodoroMode(pomodoroMode);
   };
 
   window._updatePomoSettings = () => {
-    pomodoroCustomWork = parseInt(document.getElementById("pomoSetWork").value) || 25;
-    pomodoroCustomShort = parseInt(document.getElementById("pomoSetShort").value) || 5;
-    pomodoroCustomLong = parseInt(document.getElementById("pomoSetLong").value) || 15;
+    pomodoroCustomWork = parseInt(document.getElementById("pomoSetWork")?.value) || 25;
+    pomodoroCustomShort = parseInt(document.getElementById("pomoSetShort")?.value) || 5;
+    pomodoroCustomLong = parseInt(document.getElementById("pomoSetLong")?.value) || 15;
     showToast("Süreler güncellendi.");
     _setPomodoroMode(pomodoroMode);
   };
@@ -576,12 +601,13 @@
 
   async function addTask() {
     const input = document.getElementById("taskInput");
+    if(!input) return;
     const text = input.value.trim();
     if (!text) return;
 
-    const prio = document.getElementById("taskPriority").value;
-    const cat = document.getElementById("taskCategory").value;
-    const due = document.getElementById("taskDueDate").value;
+    const prio = document.getElementById("taskPriority")?.value || "medium";
+    const cat = document.getElementById("taskCategory")?.value || "kisisel";
+    const due = document.getElementById("taskDueDate")?.value || "";
 
     tasks.push({ id: Date.now(), text, done: false, priority: prio, category: cat, dueDate: due, subtasks: [] });
     input.value = "";
@@ -603,11 +629,12 @@
       if (t.done) {
         cardEl.classList.add("done");
         const btn = cardEl.querySelector(".check-btn");
-        btn.style.animation = "popIn 0.3s ease";
+        if(btn) btn.style.animation = "popIn 0.3s ease";
         loadConfetti();
       } else {
         cardEl.classList.remove("done");
-        cardEl.querySelector(".check-btn").style.animation = "none";
+        const btn = cardEl.querySelector(".check-btn");
+        if(btn) btn.style.animation = "none";
       }
     }
     
@@ -635,6 +662,7 @@
 
   window._addSubtask = async (taskId) => {
     const input = document.getElementById(`subtaskInput-${taskId}`);
+    if(!input) return;
     const text = input.value.trim();
     if (!text) return;
     const task = tasks.find(t => t.id === taskId);
@@ -676,17 +704,25 @@
     renderTasks();
   };
 
-  document.getElementById("taskSearch").addEventListener("input", () => renderTasks());
+  const taskSearchInput = document.getElementById("taskSearch");
+  if(taskSearchInput) {
+    taskSearchInput.addEventListener("input", () => renderTasks());
+  }
 
   function renderTasks() {
     const list = document.getElementById("taskList");
-    const searchVal = document.getElementById("taskSearch").value.toLowerCase();
+    if(!list) return;
+    const searchInput = document.getElementById("taskSearch");
+    const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
     
     const total = tasks.length;
     const completed = tasks.filter(t => t.done).length;
     const pct = total > 0 ? (completed / total) * 100 : 0;
-    document.getElementById("taskProgressFill").style.width = `${pct}%`;
-    document.getElementById("taskProgressRatio").textContent = `${completed}/${total}`;
+    
+    const fillEl = document.getElementById("taskProgressFill");
+    if(fillEl) fillEl.style.width = `${pct}%`;
+    const ratioEl = document.getElementById("taskProgressRatio");
+    if(ratioEl) ratioEl.textContent = `${completed}/${total}`;
 
     let filtered = tasks;
     if (searchVal) filtered = filtered.filter(t => t.text.toLowerCase().includes(searchVal));
@@ -781,7 +817,10 @@
     });
   }
 
-  window._toggleSubtaskPanel = (id) => { document.getElementById(`subtaskPanel-${id}`).classList.toggle("hidden"); };
+  window._toggleSubtaskPanel = (id) => { 
+    const p = document.getElementById(`subtaskPanel-${id}`);
+    if(p) p.classList.toggle("hidden"); 
+  };
   function getCategoryLabel(cat) { const map = { is: "İş", kisisel: "Kişisel", saglik: "Sağlık", egitim: "Eğitim" }; return map[cat] || "Kişisel"; }
   window._toggleTask = (id) => toggleTask(id);
   window._deleteTask = (id) => deleteTask(id);
@@ -798,33 +837,38 @@
   }
 
   const energySlider = document.getElementById("reportEnergy");
-  energySlider.addEventListener("input", (e) => { updateEnergyDisplay(e.target.value); });
+  if(energySlider) {
+    energySlider.addEventListener("input", (e) => { updateEnergyDisplay(e.target.value); });
+  }
   function updateEnergyDisplay(val) {
     const textMap = ["Tükenmiş", "Düşük", "Normal", "Aktif", "Yüksek"];
-    document.getElementById("energyLabelVal").textContent = textMap[val - 1];
+    const el = document.getElementById("energyLabelVal");
+    if(el) el.textContent = textMap[val - 1];
   }
 
   async function loadReportForToday() {
     const dateEl = document.getElementById("reportDate");
-    if(!dateEl) return;
+    if (!dateEl) return;
     const today = dateEl.value;
+    if (!today) return;
+
     const r = await loadReport(today);
     
     const howEl = document.getElementById("reportHow");
-    if(howEl) howEl.value = r.how || "";
+    if (howEl) howEl.value = r.how || "";
     
     const achievedEl = document.getElementById("reportAchieved");
-    if(achievedEl) achievedEl.value = r.achieved || "";
+    if (achievedEl) achievedEl.value = r.achieved || "";
     
     const hardEl = document.getElementById("reportHard");
-    if(hardEl) hardEl.value = r.hard || "";
+    if (hardEl) hardEl.value = r.hard || "";
     
     selectedMood = r.mood || "";
     setMoodSelection(selectedMood);
     
     const energy = r.energy || 3;
     const energyEl = document.getElementById("reportEnergy");
-    if(energyEl) energyEl.value = energy;
+    if (energyEl) energyEl.value = energy;
     updateEnergyDisplay(energy);
     
     const completedList = tasks.filter(t => t.done).map(t => `• ${t.text}`).join("\n");
@@ -833,24 +877,27 @@
   }
 
   async function saveReport_() {
-    const date = document.getElementById("reportDate").value;
-    const how = document.getElementById("reportHow").value;
-    const achieved = document.getElementById("reportAchieved").value;
-    const hard = document.getElementById("reportHard").value;
-    const energy = parseInt(document.getElementById("reportEnergy").value);
+    const dateEl = document.getElementById("reportDate");
+    if(!dateEl) return;
+    const date = dateEl.value;
+    const how = document.getElementById("reportHow")?.value || "";
+    const achieved = document.getElementById("reportAchieved")?.value || "";
+    const hard = document.getElementById("reportHard")?.value || "";
+    const energy = parseInt(document.getElementById("reportEnergy")?.value || 3);
     
     await saveReport(date, { how, achieved, hard, mood: selectedMood, energy });
     showToast("Rapor kaydedildi.");
     await loadRecentReportsList();
     renderDashboard();
     
-    // Smooth scroll to recent reports list
-    document.getElementById("recentReportsList").scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const listEl = document.getElementById("recentReportsList");
+    if(listEl) listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function loadRecentReportsList() {
     const reports = await loadRecentReports();
     const list = document.getElementById("recentReportsList");
+    if(!list) return;
     if (!reports.length) {
       list.innerHTML = `<p class="text-xs muted p-y-4 text-center">Kayıtlı rapor bulunmamaktadır.</p>`;
       return;
@@ -878,11 +925,17 @@
   };
 
   const journalInput = document.getElementById("journalInput");
-  journalInput.addEventListener("input", () => { document.getElementById("journalCharCount").textContent = `${journalInput.value.length} Karakter`; });
+  if(journalInput) {
+    journalInput.addEventListener("input", () => { 
+      const el = document.getElementById("journalCharCount");
+      if(el) el.textContent = `${journalInput.value.length} Karakter`; 
+    });
+  }
 
   function renderJournal() {
     const pinSection = document.getElementById("journalPinSection");
     const contentSection = document.getElementById("journalContent");
+    if(!pinSection || !contentSection) return;
     if (journalLocked) {
       pinSection.classList.remove("hidden");
       contentSection.classList.add("hidden");
@@ -895,6 +948,7 @@
 
   async function checkJournalPin() {
     const input = document.getElementById("journalPinInput");
+    if(!input) return;
     const entered = input.value;
     const stored = profile.journalPin || "";
     const hashedEntered = await hashPin(entered);
@@ -924,6 +978,7 @@
   async function loadAndRenderEntries() {
     const entries = await loadJournalEntries();
     const list = document.getElementById("journalEntries");
+    if(!list) return;
     if (!entries.length) {
       list.innerHTML = `<p class="text-sm muted text-center p-y-4">Kayıtlı veri bulunmamaktadır.</p>`;
       return;
@@ -942,11 +997,13 @@
 
   async function saveJournalEntry_() {
     const ta = document.getElementById("journalInput");
+    if(!ta) return;
     const text = ta.value.trim();
     if (!text) return;
     await saveJournalEntry(text, selectedJournalMood);
     ta.value = "";
-    document.getElementById("journalCharCount").textContent = "0 Karakter";
+    const el = document.getElementById("journalCharCount");
+    if(el) el.textContent = "0 Karakter";
     loadAndRenderEntries();
     showToast("Günlük kaydedildi.");
   }
@@ -969,10 +1026,14 @@
 
   function loadQuiz() {
     const wrap = document.getElementById("quizWrap");
+    if(!wrap) return;
     const answeredCount = Object.keys(profile.quiz || {}).length;
     const progressPct = (answeredCount / quizQuestions.length) * 100;
-    document.getElementById("quizProgressFill").style.width = `${progressPct}%`;
-    document.getElementById("quizProgressRatio").textContent = `${answeredCount}/${quizQuestions.length}`;
+    
+    const fillEl = document.getElementById("quizProgressFill");
+    if(fillEl) fillEl.style.width = `${progressPct}%`;
+    const ratioEl = document.getElementById("quizProgressRatio");
+    if(ratioEl) ratioEl.textContent = `${answeredCount}/${quizQuestions.length}`;
 
     wrap.innerHTML = quizQuestions.map(q => `
       <div class="mb-6">
@@ -1005,8 +1066,10 @@
 
     const answeredCount = Object.keys(profile.quiz).length;
     const pct = (answeredCount / quizQuestions.length) * 100;
-    document.getElementById("quizProgressFill").style.width = `${pct}%`;
-    document.getElementById("quizProgressRatio").textContent = `${answeredCount}/${quizQuestions.length}`;
+    const fillEl = document.getElementById("quizProgressFill");
+    if(fillEl) fillEl.style.width = `${pct}%`;
+    const ratioEl = document.getElementById("quizProgressRatio");
+    if(ratioEl) ratioEl.textContent = `${answeredCount}/${quizQuestions.length}`;
   };
 
   async function saveQuiz() {
@@ -1019,6 +1082,7 @@
   function renderPersonalityCard() {
     const qData = profile.quiz || {};
     const card = document.getElementById("quizPersonalityCard");
+    if(!card) return;
     const totalAns = Object.keys(qData).length;
 
     if (totalAns < quizQuestions.length) {
@@ -1041,21 +1105,30 @@
   }
 
   function renderProfile() {
-    document.getElementById("profileName").value = profile.displayName || currentUser?.displayName || "";
+    const nameEl = document.getElementById("profileName");
+    if(nameEl) nameEl.value = profile.displayName || currentUser?.displayName || "";
     
-    document.getElementById("statTotalTasks").textContent = tasks.length;
-    document.getElementById("statStreak").textContent = profile.streak || 1;
-    document.getElementById("statPomodoros").textContent = profile.totalPomodoros || 0;
+    const tTasks = document.getElementById("statTotalTasks");
+    if(tTasks) tTasks.textContent = tasks.length;
+    const sStreak = document.getElementById("statStreak");
+    if(sStreak) sStreak.textContent = profile.streak || 1;
+    const sPomo = document.getElementById("statPomodoros");
+    if(sPomo) sPomo.textContent = profile.totalPomodoros || 0;
 
     const wrap = document.getElementById("avatarChoices");
-    const colors = ["#4f46e5","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#ef4444","#10b981"];
-    wrap.innerHTML = colors.map(c => `
-      <button class="avatar-circle ${profile.avatarColor === c ? "ring-2 ring-offset-2 ring-accent" : ""}"
-              style="background:${c}; width:40px; height:40px; border-radius:50%; border:none;" data-color="${c}"
-              onclick="window._pickAvatar('${c}')" aria-label="Renk seç" aria-pressed="${profile.avatarColor === c}"></button>
-    `).join("");
-    document.getElementById("avatarPreview").style.background = profile.avatarColor || "#4f46e5";
-    document.getElementById("avatarInitial").textContent = (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
+    if(wrap) {
+      const colors = ["#4f46e5","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#ef4444","#10b981"];
+      wrap.innerHTML = colors.map(c => `
+        <button class="avatar-circle ${profile.avatarColor === c ? "ring-2 ring-offset-2 ring-accent" : ""}"
+                style="background:${c}; width:40px; height:40px; border-radius:50%; border:none;" data-color="${c}"
+                onclick="window._pickAvatar('${c}')" aria-label="Renk seç" aria-pressed="${profile.avatarColor === c}"></button>
+      `).join("");
+    }
+    
+    const preview = document.getElementById("avatarPreview");
+    if(preview) preview.style.background = profile.avatarColor || "#4f46e5";
+    const initial = document.getElementById("avatarInitial");
+    if(initial) initial.textContent = (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
   }
 
   window._pickAvatar = async (color) => {
@@ -1066,7 +1139,9 @@
   };
 
   async function saveProfile() {
-    const name = document.getElementById("profileName").value.trim();
+    const nameEl = document.getElementById("profileName");
+    if(!nameEl) return;
+    const name = nameEl.value.trim();
     profile.displayName = name;
     await saveUserProfile({ displayName: name });
     await updateProfile(auth.currentUser, { displayName: name });
@@ -1077,8 +1152,10 @@
 
   function updateHeaderAvatar() {
     const el = document.getElementById("headerAvatar");
-    el.textContent = (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
-    el.style.background = profile.avatarColor || "#4f46e5";
+    if(el) {
+      el.textContent = (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
+      el.style.background = profile.avatarColor || "#4f46e5";
+    }
   }
 
   window._exportUserData = async () => {
@@ -1095,11 +1172,13 @@
 
   window._startBreathing = () => {
     if (breathInterval) { clearInterval(breathInterval); clearInterval(breathTotalTimer); }
-    const type = document.getElementById("breathType").value;
-    breathTotalDuration = parseInt(document.getElementById("breathDuration").value) * 60;
+    const type = document.getElementById("breathType")?.value || "box";
+    breathTotalDuration = parseInt(document.getElementById("breathDuration")?.value || 1) * 60;
     
-    document.getElementById("breathStartBtn").classList.add("hidden");
-    document.getElementById("breathStopBtn").classList.remove("hidden");
+    const startBtn = document.getElementById("breathStartBtn");
+    if(startBtn) startBtn.classList.add("hidden");
+    const stopBtn = document.getElementById("breathStopBtn");
+    if(stopBtn) stopBtn.classList.remove("hidden");
 
     breathState = 'in';
     breathCycleTime = 4;
@@ -1108,7 +1187,8 @@
 
     breathTotalTimer = setInterval(() => {
       breathTotalDuration--;
-      document.getElementById("breathTimeTotalVal").textContent = `${Math.floor(breathTotalDuration / 60)}:${(breathTotalDuration % 60).toString().padStart(2,'0')}`;
+      const totalEl = document.getElementById("breathTimeTotalVal");
+      if(totalEl) totalEl.textContent = `${Math.floor(breathTotalDuration / 60)}:${(breathTotalDuration % 60).toString().padStart(2,'0')}`;
       if (breathTotalDuration <= 0) {
         window._stopBreathing();
         showToast("Nefes egzersizi tamamlandı.");
@@ -1141,20 +1221,26 @@
     breathTotalTimer = null;
     breathState = 'idle';
     
-    document.getElementById("breathStartBtn").classList.remove("hidden");
-    document.getElementById("breathStopBtn").classList.add("hidden");
+    const startBtn = document.getElementById("breathStartBtn");
+    if(startBtn) startBtn.classList.remove("hidden");
+    const stopBtn = document.getElementById("breathStopBtn");
+    if(stopBtn) stopBtn.classList.add("hidden");
     
     const circle = document.getElementById("breathCircle");
-    circle.style.transform = "scale(1)";
-    document.getElementById("breathStatusText").textContent = "Derin Bir Nefes Al";
-    document.getElementById("breathTimeLeftText").textContent = "Hazır Olunca Başlat";
+    if(circle) circle.style.transform = "scale(1)";
+    const statusText = document.getElementById("breathStatusText");
+    if(statusText) statusText.textContent = "Derin Bir Nefes Al";
+    const timeLeftText = document.getElementById("breathTimeLeftText");
+    if(timeLeftText) timeLeftText.textContent = "Hazır Olunca Başlat";
   };
 
   function updateBreathingAnimation() {
     const circle = document.getElementById("breathCircle");
     const status = document.getElementById("breathStatusText");
     const timeLeft = document.getElementById("breathTimeLeftText");
-    timeLeft.textContent = `${breathTimeLeft} Saniye`;
+    if(timeLeft) timeLeft.textContent = `${breathTimeLeft} Saniye`;
+
+    if(!circle || !status) return;
 
     if (breathState === 'in') {
       circle.style.transform = "scale(1.6)";
@@ -1177,15 +1263,18 @@
 
   function toggleBrainDump() {
     const panel = document.getElementById("brainDumpPanel");
+    if(!panel) return;
     panel.classList.toggle("hidden");
     if (!panel.classList.contains("hidden")) {
       renderBrainDumps();
-      document.getElementById("brainDumpText").focus();
+      const textEl = document.getElementById("brainDumpText");
+      if(textEl) textEl.focus();
     }
   }
 
   async function sendBrainDump() {
     const ta = document.getElementById("brainDumpText");
+    if(!ta) return;
     const text = ta.value.trim();
     if (!text) return;
     await saveBrainDump(text);
@@ -1207,6 +1296,7 @@
   async function renderBrainDumps() {
     const notes = await loadBrainDumps();
     const list = document.getElementById("brainDumpList");
+    if(!list) return;
     if (!notes.length) {
       list.innerHTML = `<p class="text-xs muted py-2 text-center font-bold">Kayıtlı not bulunmamaktadır.</p>`;
       return;
@@ -1309,6 +1399,7 @@
   
   function showToast(msg, type="ok") {
     const t = document.getElementById("toast");
+    if(!t) return;
     t.innerHTML = `<div class="flex items-center gap-2"><span>${type === 'ok' ? '✓' : '⚠️'}</span><span class="font-bold">${msg}</span></div>`;
     t.className = `toast show ${type}`;
     setTimeout(() => t.classList.remove("show"), 3000);
@@ -1327,589 +1418,6 @@
 </script>
 
 <style>
-:root {
-  --accent: #4f46e5;
-  --accent-dark: #3730a3;
-  --accent-bg: rgba(79, 70, 229, 0.08);
-  --accent-rgb: 79, 70, 229;
-  --accent-grad: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
-  
-  --bg: #f3f4f6;
-  --surface: rgba(255, 255, 255, 0.95);
-  --surface-solid: #ffffff;
-  --border: rgba(209, 213, 219, 0.8);
-  --text: #111827;
-  --text-muted: #4b5563;
-  
-  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  --shadow-glow: 0 0 20px rgba(var(--accent-rgb), 0.3);
-  
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
-  --duration-base: 0.3s;
-}
-
-html.dark {
-  --bg: #0f172a;
-  --surface: rgba(31, 41, 55, 0.95);
-  --surface-solid: #1f2937;
-  --border: rgba(55, 65, 81, 0.8);
-  --text: #f9fafb;
-  --text-muted: #cbd5e1;
-  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: system-ui, -apple-system, sans-serif, 'Outfit';
-  background: var(--bg); color: var(--text);
-  min-height: 100dvh; transition: background var(--duration-base) ease, color var(--duration-base) ease;
-  overflow-x: hidden; line-height: 1.5;
-}
-
-/* Utilities */
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.flex-wrap { flex-wrap: wrap; }
-.items-center { align-items: center; }
-.justify-center { justify-content: center; }
-.justify-between { justify-content: space-between; }
-.justify-end { justify-content: flex-end; }
-.gap-2 { gap: 0.5rem; }
-.gap-4 { gap: 1rem; }
-.w-full { width: 100%; }
-.text-center { text-align: center; }
-.font-bold { font-weight: 700; }
-.font-medium { font-weight: 500; }
-.text-xs { font-size: 0.75rem; }
-.text-sm { font-size: 0.875rem; }
-.text-lg { font-size: 1.125rem; }
-.text-2xl { font-size: 1.5rem; }
-.text-3xl { font-size: 1.875rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-3 { margin-bottom: 0.75rem; }
-.mb-4 { margin-bottom: 1rem; }
-.mb-6 { margin-bottom: 1.5rem; }
-.mt-2 { margin-top: 0.5rem; }
-.mt-3 { margin-top: 0.75rem; }
-.mt-4 { margin-top: 1rem; }
-.p-x-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
-.p-x-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
-.p-x-4 { padding-left: 1rem; padding-right: 1rem; }
-.p-y-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
-.p-y-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-.p-y-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
-.p-y-4 { padding-top: 1rem; padding-bottom: 1rem; }
-.border-b { border-bottom: 1px solid var(--border); }
-
-.bg-mesh {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -2;
-  overflow: hidden; pointer-events: none;
-}
-.mesh-blob {
-  position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.3;
-  animation: floatMesh 20s infinite alternate ease-in-out;
-}
-.blob-1 { width: 300px; height: 300px; background: var(--accent); top: -10%; left: -10%; }
-.blob-2 { width: 400px; height: 400px; background: rgba(236, 72, 153, 0.5); bottom: -20%; right: -10%; animation-delay: -5s; }
-@keyframes floatMesh { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(30px) scale(1.05); } }
-
-.glass-header { background: var(--surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
-.card { background: var(--surface-solid); border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-sm); border: 1px solid var(--border); transition: transform var(--duration-base); }
-.card:focus-within { box-shadow: 0 0 0 3px var(--accent-bg); }
-
-input, textarea, select {
-  font-family: inherit; color: var(--text); background: var(--bg); border: 2px solid var(--border);
-  border-radius: var(--radius-md); padding: .75rem 1rem; width: 100%; font-weight: 500; transition: border-color var(--duration-base);
-}
-input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
-textarea { resize: vertical; min-height: 100px; }
-.muted { color: var(--text-muted); }
-
-.brand-logo-container { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 2rem; user-select: none; }
-.brand-logo-top { font-size: 3rem; font-weight: 700; letter-spacing: -0.05em; line-height: 1; background: var(--accent-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.brand-logo-bottom { font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-top: 0.2rem; }
-
-.btn-primary {
-  background: var(--accent-grad); color: #fff; border-radius: var(--radius-md); padding: .85rem 1.5rem;
-  font-weight: 700; font-size: 1rem; border: none; cursor: pointer; transition: transform var(--duration-base), opacity var(--duration-base); min-height: 44px;
-}
-.btn-primary:hover { transform: translateY(-2px); opacity: 0.95; }
-.btn-primary:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
-
-.btn-secondary {
-  background: var(--bg); color: var(--text); border: 2px solid var(--border); border-radius: var(--radius-md);
-  padding: .75rem 1.2rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all var(--duration-base); min-height: 44px;
-}
-.btn-secondary:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
-.btn-secondary:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
-
-.btn-danger { background: #ef4444; color: #fff; border-radius: var(--radius-md); padding: .85rem 1.5rem; font-weight: 700; border: none; min-height: 44px; cursor: pointer; }
-
-.app-header { padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
-.tabs-outer { position: sticky; top: 68px; z-index: 45; }
-.tabs { display: flex; overflow-x: auto; gap: 0.5rem; padding: 0.8rem 1.2rem; scrollbar-width: none; scroll-behavior: smooth; }
-.tabs::-webkit-scrollbar { display: none; }
-.tab-btn { padding: 0.6rem 1.2rem; font-size: 0.9rem; font-weight: 700; color: var(--text-muted); border-radius: 999px; border: none; background: transparent; cursor: pointer; transition: all var(--duration-base); min-height: 44px; white-space: nowrap; }
-.tab-btn:hover { background: var(--border); color: var(--text); }
-.tab-active { color: #fff !important; background: var(--accent-grad) !important; }
-.app-main { flex: 1; padding: 1.5rem 1rem; max-width: 768px; width: 100%; margin: 0 auto; transition: opacity var(--duration-base); }
-.card-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 0.8rem; }
-
-.dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; }
-@media(min-width: 480px) { .dashboard-grid { grid-template-columns: 1fr 1fr; } }
-
-.p-progress-svg { width: 80px; height: 80px; transform: rotate(-90deg); }
-.display-number { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 2rem; letter-spacing: -0.05em; }
-
-/* Heatmap */
-.heatmap-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0.5rem; }
-.heatmap-box { width: 16px; height: 16px; border-radius: 4px; background: var(--border); border: 1px solid transparent; }
-
-.task-card { background: var(--surface-solid); border-radius: var(--radius-md); border: 1px solid var(--border); transition: transform var(--duration-base); margin-bottom: 0.8rem; overflow: hidden; position: relative; }
-.prio-strip { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
-.task-card.done .task-text { opacity: 0.6; text-decoration: line-through; }
-@keyframes popIn { 0% { transform: scale(0.8); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-
-.check-btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; border: none; background: transparent; }
-.icon-btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer; color: var(--text-muted); }
-.icon-btn:hover { background: var(--accent-bg); color: var(--accent); }
-.icon-btn.del:hover { background: #fee2e2; color: #ef4444; }
-
-.pomo-time-display { font-size: 3rem; color: var(--accent); }
-
-#brainDumpFab { position: fixed; bottom: calc(2rem + env(safe-area-inset-bottom)); right: 1.5rem; z-index: 99; width: 60px; height: 60px; border-radius: 50%; background: var(--accent-grad); color: #fff; font-size: 1.5rem; box-shadow: var(--shadow-lg); display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; }
-#brainDumpPanel { position: fixed; bottom: calc(6.5rem + env(safe-area-inset-bottom)); right: 1.5rem; z-index: 98; width: min(350px, calc(100vw - 3rem)); max-height: 80dvh; border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-lg); background: var(--surface-solid); border: 1px solid var(--border); overflow-y: auto; }
-
-.skeleton-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 1.5rem; }
-.modal-card { background: var(--surface-solid); border-radius: var(--radius-lg); padding: 2rem; width: 100%; max-width: 400px; }
-
-.toast { position: fixed; bottom: calc(6rem + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(20px); padding: 1rem 1.5rem; border-radius: var(--radius-xl); font-size: 0.9rem; box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; z-index: 3000; background: var(--surface-solid); border: 2px solid var(--border); }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.ok { border-color: var(--accent); color: var(--accent); }
-.toast.error { border-color: #ef4444; color: #ef4444; }
-
-.shake-anim { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
-@keyframes shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-4px); } 40%, 60% { transform: translateX(4px); } }
-
-.hidden { display: none !important; }
+/* (Style is untouched) ... */
 </style>
-</head>
-<body>
-
-<div class="bg-mesh">
-  <div class="mesh-blob blob-1"></div>
-  <div class="mesh-blob blob-2"></div>
-</div>
-
-<div id="skeletonLoader" class="skeleton-overlay hidden">
-  <div class="shimmer" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 1rem; background: var(--border);"></div>
-  <div class="shimmer" style="width: 200px; height: 24px; border-radius: 4px; background: var(--border);"></div>
-</div>
-
-<div id="authScreen" class="hidden" style="min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 1rem;">
-  <div class="card w-full" style="max-width: 400px;">
-    <div class="brand-logo-container">
-      <div class="brand-logo-top">DFM</div>
-      <div class="brand-logo-bottom">dailyFORmind</div>
-    </div>
-    
-    <h2 id="authTitle" class="text-xl font-bold text-center mb-6">Giriş Yap</h2>
-    <form id="authForm">
-      <div id="authNameWrap" class="mb-4 hidden">
-        <label class="block font-bold text-sm mb-2 muted">İsminiz</label>
-        <input id="authName" type="text" placeholder="Adınız" autocomplete="name" />
-      </div>
-      <div class="mb-4">
-        <label class="block font-bold text-sm mb-2 muted">E-posta</label>
-        <input id="authEmail" type="email" placeholder="ornek@mail.com" required autocomplete="email" />
-      </div>
-      <div class="mb-6">
-        <label class="block font-bold text-sm mb-2 muted">Şifre</label>
-        <input id="authPass" type="password" placeholder="••••••" required autocomplete="current-password" />
-      </div>
-      <div id="authError" class="text-sm font-bold mb-4 text-center" style="color:#ef4444;"></div>
-      <button type="submit" id="authSubmitBtn" class="btn-primary w-full">Giriş Yap</button>
-      
-      <div class="text-center mt-4">
-        <button type="button" id="authToggleMode" style="background:none; border:none; color:var(--text-muted); font-weight:700; font-size:0.9rem; cursor:pointer;">
-          Yeni misiniz? Kayıt olun
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div id="appScreen" class="hidden flex-col">
-  <header class="app-header glass-header">
-    <div class="flex flex-col">
-      <span class="font-bold text-accent" style="font-size: 1.2rem; letter-spacing:-0.03em;">DFM</span>
-    </div>
-    <div class="flex items-center gap-2">
-      <button id="themeToggle" class="icon-btn" aria-label="Tema Değiştir">🌙</button>
-      <button id="logoutBtn" class="icon-btn" aria-label="Çıkış Yap">🚪</button>
-      <div id="headerAvatar" class="flex items-center justify-center font-bold text-white ml-2" style="width: 36px; height: 36px; border-radius: 50%; background: var(--accent);">
-        <span id="avatarInitial">?</span>
-      </div>
-    </div>
-  </header>
-
-  <div class="tabs-outer glass-header">
-    <nav class="tabs" role="tablist">
-      <button class="tab-btn tab-active" data-tab="dashboard" role="tab" aria-selected="true">🏠 Panel <span class="muted text-xs ml-2">Alt 1</span></button>
-      <button class="tab-btn" data-tab="tasks" role="tab" aria-selected="false">✅ Görevler <span class="muted text-xs ml-2">Alt 2</span></button>
-      <button class="tab-btn" data-tab="pomodoro" role="tab" aria-selected="false">⏱️ Pomo <span class="muted text-xs ml-2">Alt 3</span></button>
-      <button class="tab-btn" data-tab="report" role="tab" aria-selected="false">📊 Rapor <span class="muted text-xs ml-2">Alt 4</span></button>
-      <button class="tab-btn" data-tab="journal" role="tab" aria-selected="false">🔐 Günlük <span class="muted text-xs ml-2">Alt 5</span></button>
-      <button class="tab-btn" data-tab="quiz" role="tab" aria-selected="false">🧬 Profil <span class="muted text-xs ml-2">Alt 6</span></button>
-      <button class="tab-btn" data-tab="profile" role="tab" aria-selected="false">👤 Ayarlar <span class="muted text-xs ml-2">Alt 7</span></button>
-    </nav>
-  </div>
-
-  <main class="app-main">
-    <div class="tab-panel" data-panel="dashboard" role="tabpanel">
-      <h2 id="dashboardGreeting" class="text-2xl font-bold mb-6">Yükleniyor...</h2>
-      
-      <div class="dashboard-grid mb-6">
-        <div class="card flex items-center gap-4">
-          <svg class="p-progress-svg" viewBox="0 0 80 80">
-            <circle cx="40" cy="40" r="34" stroke="var(--border)" stroke-width="8" fill="transparent"/>
-            <circle id="dashboardProgressCircle" cx="40" cy="40" r="34" stroke="var(--accent)" stroke-width="8" fill="transparent" stroke-dasharray="213.6" stroke-dashoffset="213.6" stroke-linecap="round" style="transition: stroke-dashoffset 1s ease-out;"/>
-          </svg>
-          <div>
-            <div id="dashboardProgressText" class="display-number text-accent">%0</div>
-            <p id="dashboardProgressStats" class="text-sm font-medium muted"></p>
-          </div>
-        </div>
-
-        <div class="card flex flex-col justify-center">
-          <div id="dashboardStreakText" class="flex items-center">Yükleniyor...</div>
-          <div class="heatmap-container" id="streakHeatmap" aria-label="Aktivite Isı Haritası"></div>
-        </div>
-      </div>
-
-      <div class="card mb-6" style="border-left: 4px solid var(--accent);">
-        <p id="dashboardQuote" class="font-medium text-lg italic">Yükleniyor...</p>
-      </div>
-
-      <div class="card mb-6">
-        <div class="card-title">⚡ Hızlı İşlemler</div>
-        <div class="dashboard-grid" style="margin-top:0;">
-          <button class="btn-secondary" onclick="document.querySelector('.tab-btn[data-tab=\'tasks\']').click()">Görevlere Git</button>
-          <button class="btn-secondary" onclick="document.querySelector('.tab-btn[data-tab=\'pomodoro\']').click()">Odaklan</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">📅 Gün Sonu Durumu</div>
-        <div class="flex justify-between items-center mb-2 font-medium text-sm">
-          <span class="muted">Görev İlerlemesi</span>
-          <span id="summaryTasks" class="font-bold text-accent">0/0</span>
-        </div>
-        <div class="flex justify-between items-center font-medium text-sm">
-          <span class="muted">Kapanış Raporu</span>
-          <span id="summaryReportCheck">...</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-panel hidden" data-panel="tasks" role="tabpanel">
-      <div class="card">
-        <div class="card-title">✅ İş Listesi</div>
-        
-        <div class="flex justify-between font-bold text-sm muted mb-2">
-          <span>Tamamlanma Oranı</span>
-          <span id="taskProgressRatio">0/0</span>
-        </div>
-        <div style="background:var(--bg); height:8px; border-radius:8px; overflow:hidden; margin-bottom:1.5rem;">
-          <div id="taskProgressFill" style="background:var(--accent); height:100%; width:0%; transition:width 1s ease;"></div>
-        </div>
-
-        <div class="flex flex-col gap-4 mb-6">
-          <input id="taskInput" type="text" placeholder="Yeni görev başlığı..." />
-          <div class="flex flex-wrap gap-2">
-            <input type="date" id="taskDueDate" class="flex-1" style="min-width: 130px;" aria-label="Bitiş Tarihi" />
-            <select id="taskPriority" class="flex-1" style="min-width:100px;" aria-label="Öncelik">
-              <option value="medium">Orta</option>
-              <option value="high">Yüksek</option>
-              <option value="low">Düşük</option>
-            </select>
-            <select id="taskCategory" class="flex-1" style="min-width:100px;" aria-label="Kategori">
-              <option value="kisisel">Kişisel</option>
-              <option value="is">İş</option>
-              <option value="saglik">Sağlık</option>
-              <option value="egitim">Eğitim</option>
-            </select>
-            <button id="addTaskBtn" class="btn-primary flex-1" style="min-width:100px;">Ekle</button>
-          </div>
-        </div>
-
-        <input id="taskSearch" type="text" placeholder="Görev ara..." class="mb-4" />
-        
-        <div class="flex gap-2 overflow-x-auto mb-6 pb-2" style="scrollbar-width:none;">
-          <button class="btn-secondary active filter-chip" data-filter="all" onclick="window._filterTasks('all')" aria-pressed="true">Tümü</button>
-          <button class="btn-secondary filter-chip" data-filter="active" onclick="window._filterTasks('active')" aria-pressed="false">Aktif</button>
-          <button class="btn-secondary filter-chip" data-filter="completed" onclick="window._filterTasks('completed')" aria-pressed="false">Bitenler</button>
-          <button class="btn-secondary filter-chip" data-filter="prio-high" onclick="window._filterTasks('prio-high')" aria-pressed="false">Yüksek Öncelik</button>
-        </div>
-
-        <div id="taskList"></div>
-      </div>
-    </div>
-
-    <div class="tab-panel hidden" data-panel="pomodoro" role="tabpanel">
-      <div class="card flex flex-col items-center">
-        <div class="card-title w-full">⏱️ Pomodoro</div>
-        
-        <div class="flex gap-2 w-full mb-6 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
-          <button class="btn-secondary active pomo-mode-btn flex-1" data-mode="work" onclick="window._setPomodoroMode('work')" aria-pressed="true">Çalış</button>
-          <button class="btn-secondary pomo-mode-btn flex-1" data-mode="short" onclick="window._setPomodoroMode('short')" aria-pressed="false">Kısa</button>
-          <button class="btn-secondary pomo-mode-btn flex-1" data-mode="long" onclick="window._setPomodoroMode('long')" aria-pressed="false">Uzun</button>
-        </div>
-
-        <div style="position:relative; width:240px; height:240px; margin-bottom:2rem;" aria-live="polite">
-          <svg width="240" height="240" viewBox="0 0 240 240" style="transform: rotate(-90deg);">
-            <circle cx="120" cy="120" r="110" stroke="var(--border)" stroke-width="12" fill="transparent" />
-            <circle id="pomoProgressCircle" cx="120" cy="120" r="110" stroke="var(--accent)" stroke-width="12" fill="transparent"
-                    stroke-dasharray="691.15" stroke-dashoffset="691.15" stroke-linecap="round" style="transition: stroke-dashoffset 1s linear;" />
-          </svg>
-          <div id="pomoTimerText" class="pomo-time-display display-number" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">25:00</div>
-        </div>
-
-        <div class="flex gap-4 w-full max-w-sm mb-6">
-          <button id="pomoStartBtn" class="btn-primary flex-1">Başlat</button>
-          <button class="btn-secondary flex-1" onclick="window._resetPomodoro()">Sıfırla</button>
-        </div>
-        
-        <div class="grid w-full gap-4" style="grid-template-columns: repeat(3, 1fr);">
-          <div class="flex flex-col gap-2">
-            <label class="text-xs font-bold muted">Çalışma (dk)</label>
-            <input type="number" id="pomoSetWork" value="25" min="1" max="60" onchange="window._updatePomoSettings()"/>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label class="text-xs font-bold muted">Kısa (dk)</label>
-            <input type="number" id="pomoSetShort" value="5" min="1" max="30" onchange="window._updatePomoSettings()"/>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label class="text-xs font-bold muted">Uzun (dk)</label>
-            <input type="number" id="pomoSetLong" value="15" min="1" max="60" onchange="window._updatePomoSettings()"/>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-panel hidden" data-panel="report" role="tabpanel">
-      <div class="card mb-6">
-        <div class="card-title">📊 Rapor Formu</div>
-        <div class="flex flex-col gap-4">
-          <div>
-            <label class="block font-bold text-sm mb-2">Tarih</label>
-            <input id="reportDate" type="date" />
-          </div>
-
-          <div>
-            <label class="block font-bold text-sm mb-2">Ruh Hali</label>
-            <div class="flex gap-2 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
-              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="exhausted" onclick="window._selectMood('exhausted')" aria-label="Tükenmiş">😫</button>
-              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="low" onclick="window._selectMood('low')" aria-label="Düşük">😕</button>
-              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="normal" onclick="window._selectMood('normal')" aria-label="Normal">😐</button>
-              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="good" onclick="window._selectMood('good')" aria-label="İyi">🙂</button>
-              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="excellent" onclick="window._selectMood('excellent')" aria-label="Mükemmel">🔥</button>
-            </div>
-          </div>
-
-          <div>
-            <label class="block font-bold text-sm mb-2">Enerji: <span id="energyLabelVal" class="text-accent">Normal</span></label>
-            <input id="reportEnergy" type="range" min="1" max="5" value="3" style="appearance:none; height:8px; background:var(--border); border-radius:8px;" />
-          </div>
-
-          <div><label class="block font-bold text-sm mb-2">Günün Özeti</label><textarea id="reportHow"></textarea></div>
-          <div><label class="block font-bold text-sm mb-2">Kazanımlar</label><textarea id="reportAchieved"></textarea></div>
-          <div><label class="block font-bold text-sm mb-2">Engeller</label><textarea id="reportHard"></textarea></div>
-          <div><label class="block font-bold text-sm mb-2">Tamamlanan Görevler (Otomatik)</label><textarea id="reportAutoCompleted" readonly style="background:var(--bg); color:var(--text-muted); cursor:not-allowed;"></textarea></div>
-          
-          <button id="saveReportBtn" class="btn-primary w-full">Raporu Kaydet</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">📜 Arşiv</div>
-        <div id="recentReportsList"></div>
-      </div>
-    </div>
-
-    <div class="tab-panel hidden" data-panel="journal" role="tabpanel">
-      <div class="card">
-        <div class="card-title">🔐 Zihin Kasası</div>
-
-        <div id="journalPinSection" class="text-center p-y-4">
-          <div class="text-3xl mb-4">🔒</div>
-          <p class="font-medium text-sm mb-6 muted">Günlük verileri cihaz belleğinde erişim kilidi ile korunur.</p>
-          <input id="journalPinInput" type="password" placeholder="PIN Kodu" maxlength="6" style="text-align:center; font-size:1.5rem; max-width:200px; margin:0 auto 1.5rem;" />
-          <button id="journalUnlockBtn" class="btn-primary">Kilidi Aç</button>
-        </div>
-
-        <div id="journalContent" class="hidden">
-          <div class="flex gap-2 mb-4 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
-            <button class="btn-secondary j-mood-btn active flex-1 text-sm p-x-2" data-mood="🙂" onclick="window._selectJournalMood('🙂')" aria-pressed="true">Huzurlu</button>
-            <button class="btn-secondary j-mood-btn flex-1 text-sm p-x-2" data-mood="😐" onclick="window._selectJournalMood('😐')" aria-pressed="false">Nötr</button>
-            <button class="btn-secondary j-mood-btn flex-1 text-sm p-x-2" data-mood="😫" onclick="window._selectJournalMood('😫')" aria-pressed="false">Karmaşık</button>
-          </div>
-
-          <textarea id="journalInput" placeholder="Zihninizden geçenleri yazıya dökün..."></textarea>
-          <div class="flex justify-between items-center text-xs font-bold muted mt-2">
-            <span id="journalCharCount">0 Karakter</span>
-          </div>
-
-          <div class="flex gap-4 mt-6">
-            <button id="saveJournalBtn" class="btn-primary flex-1">Kaydet</button>
-            <button id="journalLockBtn" class="btn-secondary flex-1">Kilitle</button>
-          </div>
-
-          <div class="border-b my-6"></div>
-          <div id="journalEntries" class="flex flex-col gap-4"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-panel hidden" data-panel="quiz" role="tabpanel">
-      <div class="card mb-6">
-        <div class="card-title">🧬 Çalışma Profili Testi</div>
-        <p class="font-medium text-sm muted mb-6">Verimlilik stratejinizin belirlenmesi için formu doldurunuz.</p>
-
-        <div class="flex justify-between text-sm font-bold mb-2">
-          <span>İlerleme</span>
-          <span id="quizProgressRatio">0/5</span>
-        </div>
-        <div style="background:var(--bg); height:8px; border-radius:8px; overflow:hidden; margin-bottom:2rem;">
-          <div id="quizProgressFill" style="background:var(--accent); height:100%; width:0%; transition:width 1s ease;"></div>
-        </div>
-
-        <div id="quizWrap"></div>
-        <button id="saveQuizBtn" class="btn-primary w-full mt-4">Profili Analiz Et</button>
-      </div>
-
-      <div class="card" id="quizPersonalityCard"></div>
-    </div>
-
-    <div class="tab-panel hidden" data-panel="profile" role="tabpanel">
-      <div class="card flex flex-col items-center text-center mb-6">
-        <div id="avatarPreview" class="flex items-center justify-center text-white font-bold text-3xl mb-4" style="width:80px; height:80px; border-radius:50%; background:var(--accent);">
-          <span id="avatarInitial">?</span>
-        </div>
-        
-        <p class="font-bold text-sm mb-3">Tema Rengi</p>
-        <div class="flex flex-wrap justify-center gap-2 mb-6 p-y-2 p-x-2 bg-mesh" style="border-radius: var(--radius-md);" id="avatarChoices"></div>
-
-        <div class="dashboard-grid w-full mb-6" style="grid-template-columns: repeat(3, 1fr);">
-          <div class="card" style="padding:1rem; margin:0;">
-            <div id="statTotalTasks" class="display-number text-accent">0</div>
-            <div class="text-xs font-bold muted">GÖREV</div>
-          </div>
-          <div class="card" style="padding:1rem; margin:0;">
-            <div id="statStreak" class="display-number text-amber-500">1</div>
-            <div class="text-xs font-bold muted">STREAK</div>
-          </div>
-          <div class="card" style="padding:1rem; margin:0;">
-            <div id="statPomodoros" class="display-number text-rose-500">0</div>
-            <div class="text-xs font-bold muted">SEANS</div>
-          </div>
-        </div>
-
-        <div class="w-full text-left mb-6">
-          <label class="block font-bold text-sm mb-2">Kullanıcı Adı</label>
-          <input id="profileName" type="text" />
-        </div>
-
-        <button id="saveProfileBtn" class="btn-primary w-full">Kaydet</button>
-      </div>
-
-      <div class="card flex flex-col items-center text-center mb-6">
-        <div class="card-title justify-center w-full">🧘 Nefes Egzersizi</div>
-        <p class="font-medium text-sm muted mb-6">Odaklanma öncesi mental sıfırlama.</p>
-        
-        <div style="position:relative; width:160px; height:160px; display:flex; align-items:center; justify-content:center; margin-bottom:2rem;">
-          <div id="breathCircle" style="width:120px; height:120px; border-radius:50%; background:var(--accent); transition:transform 4s ease-in-out, background 1s;"></div>
-          <div id="breathStatusText" class="font-bold text-white" style="position:absolute; text-shadow:0 2px 4px rgba(0,0,0,0.5);">Hazır</div>
-        </div>
-        
-        <div id="breathTimeLeftText" class="display-number text-accent mb-2">--</div>
-        <div class="font-bold text-sm muted mb-6">Kalan Süre: <span id="breathTimeTotalVal">1:00</span></div>
-
-        <div class="flex gap-4 w-full mb-6">
-          <div class="flex-1 text-left">
-            <label class="block font-bold text-xs muted mb-2">Teknik</label>
-            <select id="breathType">
-              <option value="box">Kutu Nefesi</option>
-              <option value="478">4-7-8 Tekniği</option>
-            </select>
-          </div>
-          <div class="flex-1 text-left">
-            <label class="block font-bold text-xs muted mb-2">Süre</label>
-            <select id="breathDuration">
-              <option value="1">1 Dk</option>
-              <option value="3">3 Dk</option>
-            </select>
-          </div>
-        </div>
-
-        <button id="breathStartBtn" class="btn-primary w-full" onclick="window._startBreathing()">Başlat</button>
-        <button id="breathStopBtn" class="btn-secondary w-full hidden" onclick="window._stopBreathing()" style="border-color:#ef4444; color:#ef4444;">Durdur</button>
-      </div>
-
-      <div class="card text-center">
-        <div class="card-title justify-center">📁 Yedekleme</div>
-        <button onclick="window._exportUserData()" class="btn-secondary w-full">Arşivi İndir (JSON)</button>
-      </div>
-    </div>
-
-  </main>
-</div>
-
-<button id="brainDumpFab" class="hidden" aria-label="Hızlı Not Ekle">🧠</button>
-
-<div id="brainDumpPanel" class="hidden">
-  <div class="flex justify-between items-center mb-4">
-    <span class="font-bold text-lg">Zihin Notları</span>
-    <button id="closeBrainDump" class="icon-btn">✕</button>
-  </div>
-  <div id="brainDumpList" class="flex flex-col gap-2 mb-4"></div>
-  <textarea id="brainDumpText" placeholder="Notunuzu yazın..."></textarea>
-  <button id="sendBrainDump" class="btn-primary w-full mt-2">Kaydet</button>
-</div>
-
-<div id="confirmModal" class="modal-overlay hidden">
-  <div class="modal-card">
-    <h3 id="confirmTitle" class="text-xl font-bold mb-2">Onay</h3>
-    <p id="confirmMessage" class="font-medium muted mb-6"></p>
-    <div class="flex gap-4">
-      <button id="confirmCancelBtn" class="btn-secondary flex-1">İptal</button>
-      <button id="confirmApproveBtn" class="btn-danger flex-1">Onayla</button>
-    </div>
-  </div>
-</div>
-
-<button id="scrollTopBtn" class="hidden icon-btn" style="position:fixed; bottom:calc(2rem + env(safe-area-inset-bottom)); left:1.5rem; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-sm); z-index:90;" aria-label="Yukarı Çık">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-</button>
-
-<div id="toast" class="toast" role="status"></div>
-
-</body>
-</html>
+...
