@@ -8,7 +8,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800;900&family=Plus+Jakarta+Sans:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -180,227 +180,239 @@
   ];
 
   document.addEventListener("DOMContentLoaded", () => {
-    document.documentElement.classList.add("dark");
-    showSkeleton(true);
-    requestNotificationPermission();
+    try {
+      document.documentElement.classList.add("dark");
+      showSkeleton(true);
+      requestNotificationPermission();
 
-    const setupAuthAndData = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-      } catch (err) { console.error("Auth init hatası:", err); }
+      const setupAuthAndData = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          }
+        } catch (err) { console.error("Auth init hatası:", err); }
 
-      onAuthStateChanged(auth, async user => {
-        currentUser = user;
-        if (user) {
-          try {
-            profile = await loadUserProfile();
-            await handleStreakCalculation();
-            applyTheme(profile.theme || "dark");
-            applyAccent(profile.accent || "indigo");
-            tasks = await loadTasks();
-            showApp();
-            renderAll();
-          } catch (err) {
-            console.error("Başlangıç verisi hatası:", err);
-            showApp();
-          } finally {
+        onAuthStateChanged(auth, async user => {
+          currentUser = user;
+          if (user) {
+            try {
+              profile = await loadUserProfile();
+              await handleStreakCalculation();
+              applyTheme(profile.theme || "dark");
+              applyAccent(profile.accent || "indigo");
+              tasks = await loadTasks();
+              showApp();
+              renderAll();
+            } catch (err) {
+              console.error("Başlangıç verisi hatası:", err);
+              showApp();
+            } finally {
+              showSkeleton(false);
+            }
+          } else {
+            showAuth();
             showSkeleton(false);
           }
-        } else {
-          showAuth();
-          showSkeleton(false);
-        }
-      });
-    };
+        });
+      };
 
-    setupAuthAndData();
+      setupAuthAndData();
 
-    document.getElementById("authForm")?.addEventListener("submit", async e => {
-      e.preventDefault();
-      const email = document.getElementById("authEmail")?.value.trim();
-      const pass = document.getElementById("authPass")?.value;
-      const isLogin = document.getElementById("authToggleMode")?.dataset.mode === "login";
-      const errEl = document.getElementById("authError");
-      if(errEl) errEl.textContent = "";
-      showSkeleton(true);
-      try {
-        if (isLogin) {
-          await signInWithEmailAndPassword(auth, email, pass);
-        } else {
-          const cred = await createUserWithEmailAndPassword(auth, email, pass);
-          const name = document.getElementById("authName")?.value.trim() || "Kullanıcı";
-          await updateProfile(cred.user, { displayName: name });
-          await saveUserProfile({ 
-            displayName: name, theme: "dark", accent: "indigo",
-            streak: 1, lastActiveDate: new Date().toISOString().split("T")[0], totalPomodoros: 0, avatarColor: "#4f46e5"
-          });
-        }
-      } catch (err) { 
-        if(errEl) errEl.textContent = firebaseErrorMsg(err.code); 
-      } 
-      finally { showSkeleton(false); }
-    });
-
-    document.getElementById("authToggleMode")?.addEventListener("click", e => {
-      const isLogin = e.target.dataset.mode === "login";
-      e.target.dataset.mode = isLogin ? "register" : "login";
-      const authTitle = document.getElementById("authTitle");
-      if(authTitle) authTitle.textContent = isLogin ? "Hoş Geldiniz" : "Hesap Oluştur";
-      e.target.textContent = isLogin ? "Zaten bir hesabınız var mı? Giriş yapın" : "Yeni misiniz? Hemen kayıt olun";
-      const submitBtn = document.getElementById("authSubmitBtn");
-      if(submitBtn) submitBtn.textContent = isLogin ? "Hesap Oluştur" : "Giriş Yap";
-      const nameWrap = document.getElementById("authNameWrap");
-      if(nameWrap) nameWrap.classList.toggle("hidden", isLogin);
-    });
-
-    // Dropdown events
-    document.getElementById("headerAvatar")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const dd = document.getElementById("profileDropdown");
-      if(dd) dd.classList.toggle("hidden");
-    });
-    
-    document.addEventListener("click", (e) => {
-      const dd = document.getElementById("profileDropdown");
-      const avatar = document.getElementById("headerAvatar");
-      if(dd && !dd.classList.contains("hidden") && e.target !== avatar && !avatar.contains(e.target) && e.target !== dd && !dd.contains(e.target)) {
-        dd.classList.add("hidden");
-      }
-    });
-
-    document.getElementById("dd-logout")?.addEventListener("click", async () => {
-      const confirmLogout = await customConfirm("Çıkış Yap", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?");
-      if (confirmLogout) await signOut(auth);
-    });
-    
-    document.getElementById("dd-theme")?.addEventListener("click", async () => {
-      const isDark = document.documentElement.classList.toggle("dark");
-      const theme = isDark ? "dark" : "light";
-      profile.theme = theme;
-      if (uid()) await saveUserProfile({ theme });
-    });
-    
-    document.getElementById("dd-profile")?.addEventListener("click", () => {
-      switchTab('profile', document.querySelector(`.tab-btn[data-tab="profile"]`));
-      document.getElementById("profileDropdown")?.classList.add("hidden");
-    });
-
-    document.querySelectorAll(".tab-btn").forEach(btn => {
-      btn?.addEventListener("click", () => switchTab(btn.dataset.tab, btn));
-    });
-
-    /* Tab: Tasks */
-    document.getElementById("taskInput")?.addEventListener("keydown", async e => { if (e.key === "Enter") await addTask(); });
-    document.getElementById("addTaskBtn")?.addEventListener("click", addTask);
-    
-    /* Tab: Pomodoro Binds */
-    document.getElementById("pomoStartBtn")?.addEventListener("click", window._togglePomodoro);
-    document.getElementById("pomoResetBtn")?.addEventListener("click", window._resetPomodoro);
-
-    /* Tab: Profile */
-    document.getElementById("saveProfileBtn")?.addEventListener("click", saveProfile);
-    
-    // Profil Fotoğrafı Yükleme Mantığı
-    document.getElementById("avatarPreview")?.addEventListener("click", () => {
-      document.getElementById("avatarFileInput")?.click();
-    });
-    
-    document.getElementById("avatarFileInput")?.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          const base64String = event.target.result;
-          profile.photoURL = base64String;
-          await saveUserProfile({ photoURL: base64String });
-          renderProfile();
-          updateHeaderAvatar();
-          showToast("Profil fotoğrafı güncellendi.");
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-
-    /* Tab: Report */
-    document.getElementById("saveReportBtn")?.addEventListener("click", saveReport_);
-    
-    /* Tab: Journal */
-    document.getElementById("journalUnlockBtn")?.addEventListener("click", checkJournalPin);
-    document.getElementById("journalPinInput")?.addEventListener("keydown", e => { if (e.key === "Enter") checkJournalPin(); });
-    document.getElementById("journalLockBtn")?.addEventListener("click", () => { journalLocked = true; renderJournal(); });
-    document.getElementById("saveJournalBtn")?.addEventListener("click", saveJournalEntry_);
-    document.getElementById("resetJournalBtn")?.addEventListener("click", async () => {
-       const confirmReset = await customConfirm("Günlüğü Sıfırla", "Tüm günlük verileri ve parolanız SİLİNECEKTİR. Onaylıyor musunuz?");
-       if(confirmReset) await resetJournalData();
-    });
-
-    /* Brain Dump */
-    document.getElementById("brainDumpFab")?.addEventListener("click", toggleBrainDump);
-    document.getElementById("closeBrainDump")?.addEventListener("click", () => { document.getElementById("brainDumpPanel")?.classList.add("hidden"); });
-    document.getElementById("sendBrainDump")?.addEventListener("click", sendBrainDump);
-    document.getElementById("brainDumpText")?.addEventListener("keydown", e => { if (e.key === "Enter" && e.ctrlKey) sendBrainDump(); });
-
-    /* Profile Theme Buttons */
-    document.querySelectorAll(".accent-btn").forEach(btn => {
-      btn?.addEventListener("click", async () => {
-        const accent = btn.dataset.accent;
-        applyAccent(accent);
-        profile.accent = accent;
-        if (uid()) await saveUserProfile({ accent });
-        renderProfile();
-      });
-    });
-
-    /* Tab: Quiz */
-    document.getElementById("saveQuizBtn")?.addEventListener("click", saveQuiz);
-    
-    const today = new Date().toISOString().split("T")[0];
-    const reportDateInput = document.getElementById("reportDate");
-    if(reportDateInput) reportDateInput.value = today;
-    
-    if(reportDateInput) {
-      reportDateInput.addEventListener("change", async e => {
+      document.getElementById("authForm")?.addEventListener("submit", async e => {
+        e.preventDefault();
+        const email = document.getElementById("authEmail")?.value.trim();
+        const pass = document.getElementById("authPass")?.value;
+        const isLogin = document.getElementById("authToggleMode")?.dataset.mode === "login";
+        const errEl = document.getElementById("authError");
+        if(errEl) errEl.textContent = "";
         showSkeleton(true);
-        await loadReportForToday();
-        showSkeleton(false);
+        try {
+          if (isLogin) {
+            await signInWithEmailAndPassword(auth, email, pass);
+          } else {
+            const cred = await createUserWithEmailAndPassword(auth, email, pass);
+            const name = document.getElementById("authName")?.value.trim() || "Kullanıcı";
+            await updateProfile(cred.user, { displayName: name });
+            await saveUserProfile({ 
+              displayName: name, theme: "dark", accent: "indigo",
+              streak: 1, lastActiveDate: new Date().toISOString().split("T")[0], totalPomodoros: 0, avatarColor: "#4f46e5"
+            });
+          }
+        } catch (err) { 
+          if(errEl) errEl.textContent = firebaseErrorMsg(err.code); 
+        } 
+        finally { showSkeleton(false); }
       });
-    }
 
-    /* Global Keys */
-    document.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.altKey) && e.key >= "1" && e.key <= "7") {
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return;
-        const tabs = ["dashboard", "tasks", "pomodoro", "report", "journal", "quiz", "profile"];
-        const target = tabs[parseInt(e.key) - 1];
-        if (target) { 
-          e.preventDefault(); 
-          const btn = document.querySelector(`.tab-btn[data-tab="${target}"]`);
-          switchTab(target, btn); 
+      document.getElementById("authToggleMode")?.addEventListener("click", e => {
+        const isLogin = e.target.dataset.mode === "login";
+        e.target.dataset.mode = isLogin ? "register" : "login";
+        const authTitle = document.getElementById("authTitle");
+        if(authTitle) authTitle.textContent = isLogin ? "Hoş Geldiniz" : "Hesap Oluştur";
+        e.target.textContent = isLogin ? "Zaten bir hesabınız var mı? Giriş yapın" : "Yeni misiniz? Hemen kayıt olun";
+        const submitBtn = document.getElementById("authSubmitBtn");
+        if(submitBtn) submitBtn.textContent = isLogin ? "Hesap Oluştur" : "Giriş Yap";
+        const nameWrap = document.getElementById("authNameWrap");
+        if(nameWrap) nameWrap.classList.toggle("hidden", isLogin);
+      });
+
+      // Dropdown events
+      document.getElementById("headerAvatar")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const dd = document.getElementById("profileDropdown");
+        if(dd) dd.classList.toggle("hidden");
+      });
+      
+      document.addEventListener("click", (e) => {
+        const dd = document.getElementById("profileDropdown");
+        const avatar = document.getElementById("headerAvatar");
+        if(dd && !dd.classList.contains("hidden") && e.target !== avatar && !avatar.contains(e.target) && e.target !== dd && !dd.contains(e.target)) {
+          dd.classList.add("hidden");
         }
-      }
-    });
+      });
 
-    const scrollTopBtn = document.getElementById("scrollTopBtn");
-    window.addEventListener("scroll", () => {
-      if (window.scrollY > 300) scrollTopBtn?.classList.remove("hidden");
-      else scrollTopBtn?.classList.add("hidden");
-    });
-    scrollTopBtn?.addEventListener("click", () => { window.scrollTo({ top: 0, behavior: "smooth" }); });
+      document.getElementById("dd-logout")?.addEventListener("click", async () => {
+        const confirmLogout = await customConfirm("Çıkış Yap", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?");
+        if (confirmLogout) await signOut(auth);
+      });
+      
+      document.getElementById("dd-theme")?.addEventListener("click", async () => {
+        const isDark = document.documentElement.classList.toggle("dark");
+        const theme = isDark ? "dark" : "light";
+        profile.theme = theme;
+        if (uid()) await saveUserProfile({ theme });
+      });
+      
+      document.getElementById("dd-profile")?.addEventListener("click", () => {
+        switchTab('profile', document.querySelector(`.tab-btn[data-tab="profile"]`));
+        document.getElementById("profileDropdown")?.classList.add("hidden");
+      });
+
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn?.addEventListener("click", () => switchTab(btn.dataset.tab, btn));
+      });
+
+      /* Tab: Tasks */
+      document.getElementById("taskInput")?.addEventListener("keydown", async e => { if (e.key === "Enter") await addTask(); });
+      document.getElementById("addTaskBtn")?.addEventListener("click", addTask);
+      
+      /* Tab: Pomodoro Binds */
+      document.getElementById("pomoStartBtn")?.addEventListener("click", window._togglePomodoro);
+      document.getElementById("pomoResetBtn")?.addEventListener("click", window._resetPomodoro);
+
+      /* Tab: Profile */
+      document.getElementById("saveProfileBtn")?.addEventListener("click", saveProfile);
+      
+      document.getElementById("avatarPreview")?.addEventListener("click", () => {
+        document.getElementById("avatarFileInput")?.click();
+      });
+      
+      document.getElementById("avatarFileInput")?.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const base64String = event.target.result;
+            profile.photoURL = base64String;
+            await saveUserProfile({ photoURL: base64String });
+            renderProfile();
+            updateHeaderAvatar();
+            showToast("Profil fotoğrafı güncellendi.");
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      /* Tab: Report */
+      document.getElementById("saveReportBtn")?.addEventListener("click", saveReport_);
+      
+      /* Tab: Journal */
+      document.getElementById("journalUnlockBtn")?.addEventListener("click", checkJournalPin);
+      document.getElementById("journalPinInput")?.addEventListener("keydown", e => { if (e.key === "Enter") checkJournalPin(); });
+      document.getElementById("journalLockBtn")?.addEventListener("click", () => { journalLocked = true; renderJournal(); });
+      document.getElementById("saveJournalBtn")?.addEventListener("click", saveJournalEntry_);
+      document.getElementById("resetJournalBtn")?.addEventListener("click", async () => {
+         const confirmReset = await customConfirm("Günlüğü Sıfırla", "Tüm günlük verileri ve parolanız SİLİNECEKTİR. Onaylıyor musunuz?");
+         if(confirmReset) await resetJournalData();
+      });
+
+      /* Brain Dump */
+      document.getElementById("brainDumpFab")?.addEventListener("click", toggleBrainDump);
+      document.getElementById("closeBrainDump")?.addEventListener("click", () => { document.getElementById("brainDumpPanel")?.classList.add("hidden"); });
+      document.getElementById("sendBrainDump")?.addEventListener("click", sendBrainDump);
+      document.getElementById("brainDumpText")?.addEventListener("keydown", e => { if (e.key === "Enter" && e.ctrlKey) sendBrainDump(); });
+
+      /* Profile Theme Buttons */
+      document.querySelectorAll(".accent-btn").forEach(btn => {
+        btn?.addEventListener("click", async () => {
+          const accent = btn.dataset.accent;
+          applyAccent(accent);
+          profile.accent = accent;
+          if (uid()) await saveUserProfile({ accent });
+          renderProfile();
+        });
+      });
+
+      /* Tab: Quiz */
+      document.getElementById("saveQuizBtn")?.addEventListener("click", saveQuiz);
+      
+      const today = new Date().toISOString().split("T")[0];
+      const reportDateInput = document.getElementById("reportDate");
+      if(reportDateInput) reportDateInput.value = today;
+      
+      if(reportDateInput) {
+        reportDateInput.addEventListener("change", async e => {
+          showSkeleton(true);
+          await loadReportForToday();
+          showSkeleton(false);
+        });
+      }
+
+      /* Global Keys */
+      document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.altKey) && e.key >= "1" && e.key <= "7") {
+          const activeEl = document.activeElement;
+          if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return;
+          const tabs = ["dashboard", "tasks", "pomodoro", "report", "journal", "quiz", "profile"];
+          const target = tabs[parseInt(e.key) - 1];
+          if (target) { 
+            e.preventDefault(); 
+            const btn = document.querySelector(`.tab-btn[data-tab="${target}"]`);
+            switchTab(target, btn); 
+          }
+        }
+      });
+
+      const scrollTopBtn = document.getElementById("scrollTopBtn");
+      window.addEventListener("scroll", () => {
+        if (window.scrollY > 300) scrollTopBtn?.classList.remove("hidden");
+        else scrollTopBtn?.classList.add("hidden");
+      });
+      scrollTopBtn?.addEventListener("click", () => { window.scrollTo({ top: 0, behavior: "smooth" }); });
+
+    } catch (globalErr) {
+      console.error("Kritik Başlatma Hatası:", globalErr);
+      showSkeleton(false);
+    }
   });
 
   function requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-      Notification.requestPermission();
-    }
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+          const promise = Notification.requestPermission();
+          if (promise) promise.catch(e => console.warn(e));
+        }
+      }
+    } catch(e) { console.warn("Bildirim izni alınamadı.", e); }
   }
 
   function notifyUser(title, body) {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body });
-    }
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body });
+      }
+    } catch(e) { console.warn("Bildirim gösterilemedi.", e); }
   }
 
   async function hashPin(pin) {
@@ -479,7 +491,9 @@
     isSwitchingTab = true;
     activeTab = tab;
     
-    if (btnEl && btnEl.scrollIntoView) btnEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    if (btnEl && btnEl.scrollIntoView) {
+      btnEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
     
     const mainArea = document.querySelector(".app-main");
     if(mainArea) {
@@ -506,7 +520,7 @@
         mainArea.style.pointerEvents = "auto";
       }
       isSwitchingTab = false;
-    }, 250);
+    }, 200);
   }
 
   function renderDashboard() {
@@ -809,8 +823,8 @@
 
     if (!filtered.length) {
       list.innerHTML = `
-        <div class="empty-state text-center p-y-4">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto; opacity:0.8;">
+        <div class="text-center p-y-4" style="opacity:0.8;">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto;">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <p class="muted mt-3 text-sm font-bold">Listelenecek görev bulunamadı.</p>
@@ -829,11 +843,11 @@
       return `
         <div class="task-card ${t.done ? "done" : ""}" draggable="true" data-idx="${i}" id="task-${t.id}">
           <div class="prio-strip" style="background-color: ${prioColor}"></div>
-          <div class="task-main-row w-full flex items-center gap-4">
+          <div class="flex items-center gap-4 w-full">
             <button class="check-btn" onclick="window._toggleTask(${t.id})" aria-label="${t.done ? 'Geri al' : 'Tamamla'}">
               ${t.done ? checkIcon() : emptyCheckIcon()}
             </button>
-            <div class="task-content flex-1">
+            <div class="flex-1">
               <span class="task-text">${escHtml(t.text)}</span>
               <div class="flex flex-wrap gap-2 mt-2">
                 <span class="badge" style="border:1px solid var(--border); color:var(--text-muted);">${catLabel}</span>
@@ -841,7 +855,7 @@
                 ${hasSubtasks ? `<span class="badge" style="border:1px solid var(--border); color:var(--text-muted);">Alt: ${subCompleted}/${subTotal}</span>` : ""}
               </div>
             </div>
-            <div class="task-actions flex gap-2">
+            <div class="flex gap-2">
               <button onclick="window._moveTask(${i}, -1)" class="icon-btn" aria-label="Yukarı taşı">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
               </button>
@@ -857,19 +871,19 @@
             </div>
           </div>
 
-          <div id="subtaskPanel-${t.id}" class="subtask-panel hidden">
-            <div class="subtask-list mt-3">
+          <div id="subtaskPanel-${t.id}" class="hidden" style="border-top:1px dashed var(--border); margin-top:1rem; padding-top:1rem;">
+            <div class="flex flex-col gap-2 mb-3">
               ${(t.subtasks || []).map(s => `
                 <div class="flex items-center gap-2 p-y-2 border-b">
                   <input type="checkbox" ${s.done ? "checked" : ""} onclick="window._toggleSubtask(${t.id}, ${s.id})" aria-label="Alt görevi tamamla" style="width:16px;" />
                   <span class="flex-1 text-sm ${s.done ? 'muted line-through' : ''}">${escHtml(s.text)}</span>
-                  <button onclick="window._deleteSubtask(${t.id}, ${s.id})" class="icon-btn del text-xs" style="min-width:24px; min-height:24px; width:24px; height:24px;" aria-label="Sil">✕</button>
+                  <button onclick="window._deleteSubtask(${t.id}, ${s.id})" class="icon-btn del text-xs" style="min-width:28px; width:28px; height:28px;" aria-label="Sil">✕</button>
                 </div>
               `).join("")}
             </div>
-            <div class="flex gap-2 mt-2">
+            <div class="flex gap-2">
               <input type="text" id="subtaskInput-${t.id}" placeholder="Alt adım..." class="text-sm p-x-2 p-y-2" />
-              <button class="btn-secondary text-sm p-x-2" onclick="window._addSubtask(${t.id})">Ekle</button>
+              <button class="btn-secondary text-sm p-x-3" onclick="window._addSubtask(${t.id})">Ekle</button>
             </div>
           </div>
         </div>
@@ -1396,7 +1410,7 @@
     renderTasks();
     renderDashboard();
     showToast("Not göreve dönüştürüldü.");
-  };
+  }
 
   async function renderBrainDumps() {
     const notes = await loadBrainDumps();
@@ -1676,6 +1690,7 @@ textarea { resize: vertical; min-height: 100px; }
 .tab-btn:hover { background: var(--border); color: var(--text); }
 .tab-active { color: #fff !important; background: var(--accent-grad) !important; font-weight: 700; box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.2); }
 
+#appScreen:not(.hidden) { display: flex; flex-direction: column; }
 .app-main { flex: 1; padding: 1.5rem 1rem; max-width: 800px; width: 100%; margin: 0 auto; transition: opacity var(--duration-base); }
 .card-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 0.8rem; }
 
@@ -1746,19 +1761,12 @@ textarea { resize: vertical; min-height: 100px; }
 <div id="authScreen" class="hidden" style="min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 1rem;">
   <div class="card w-full" style="max-width: 400px; padding: 3rem 2rem;">
     <div class="brand-logo-container">
-      <!-- Özel SVG Logo -->
-      <svg class="dfm-svg-logo" viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
-        <!-- Yıldız -->
-        <path d="M125 5 Q 130 10 135 5 Q 130 0 125 5 Z" fill="#0ea5e9" />
-        <!-- Yapraklı Dal -->
-        <path d="M60 50 C 60 15, 100 10, 130 30" stroke="var(--accent)" stroke-width="5" fill="none" stroke-linecap="round" />
-        <path d="M70 50 C 70 30, 100 25, 120 40" stroke="#0ea5e9" stroke-width="4" fill="none" stroke-linecap="round" />
-        <!-- Yapraklar -->
-        <path d="M110 30 C 115 20, 125 20, 125 30 C 125 40, 115 40, 110 30 Z" fill="var(--accent)" />
-        <path d="M130 25 C 140 15, 155 15, 150 30 C 145 45, 130 35, 130 25 Z" fill="#0ea5e9" />
-        <path d="M120 40 C 130 35, 140 40, 135 50 C 130 60, 120 50, 120 40 Z" fill="var(--accent)" />
-        <!-- Metin -->
-        <text x="100" y="90" font-family="Outfit, sans-serif" font-weight="900" font-size="64" text-anchor="middle" fill="var(--text)">DFM</text>
+      <svg class="dfm-svg-logo" viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg" style="width: 140px; height: auto;">
+        <path d="M 60 70 C 60 20, 100 10, 140 40" stroke="var(--accent)" stroke-width="8" fill="none" stroke-linecap="round" />
+        <path d="M 120 40 C 130 25, 150 25, 145 45 C 135 50, 115 45, 120 40 Z" fill="var(--accent)" />
+        <path d="M 145 45 C 155 35, 175 35, 170 55 C 160 65, 140 60, 145 45 Z" fill="#0ea5e9" />
+        <path d="M 140 15 L 145 25 L 155 25 L 148 32 L 150 42 L 140 37 L 130 42 L 132 32 L 125 25 L 135 25 Z" fill="#0ea5e9" />
+        <text x="100" y="95" font-family="'Outfit', sans-serif" font-weight="900" font-size="56" text-anchor="middle" fill="var(--text)">DFM</text>
       </svg>
       <div class="brand-logo-bottom">DailyForMind</div>
     </div>
@@ -1789,7 +1797,7 @@ textarea { resize: vertical; min-height: 100px; }
   </div>
 </div>
 
-<div id="appScreen" class="hidden flex-col">
+<div id="appScreen" class="hidden">
   <header class="app-header glass-header">
     <div class="flex flex-col">
       <span class="font-bold text-accent" style="font-size: 1.4rem; letter-spacing:-0.03em;">DFM</span>
@@ -1810,7 +1818,7 @@ textarea { resize: vertical; min-height: 100px; }
     </div>
   </header>
 
-  <div class="tabs-outer glass-header">
+  <div class="tabs-outer">
     <nav class="tabs" role="tablist">
       <button class="tab-btn tab-active" data-tab="dashboard" role="tab" aria-selected="true">🏠 Panel</button>
       <button class="tab-btn" data-tab="tasks" role="tab" aria-selected="false">✅ Görevler</button>
@@ -1916,7 +1924,7 @@ textarea { resize: vertical; min-height: 100px; }
       <div class="card flex flex-col items-center">
         <div class="card-title w-full">⏱️ Pomodoro</div>
         
-        <div class="flex gap-2 w-full mb-6 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
+        <div class="flex flex-row items-center justify-center gap-2 w-full mb-6 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
           <button class="btn-secondary active pomo-mode-btn flex-1" data-mode="work" onclick="window._setPomodoroMode('work')" aria-pressed="true">Çalış</button>
           <button class="btn-secondary pomo-mode-btn flex-1" data-mode="short" onclick="window._setPomodoroMode('short')" aria-pressed="false">Kısa</button>
           <button class="btn-secondary pomo-mode-btn flex-1" data-mode="long" onclick="window._setPomodoroMode('long')" aria-pressed="false">Uzun</button>
@@ -1936,16 +1944,16 @@ textarea { resize: vertical; min-height: 100px; }
           <button id="pomoResetBtn" class="btn-secondary flex-1 text-lg">Sıfırla</button>
         </div>
         
-        <div class="grid w-full gap-4" style="grid-template-columns: repeat(3, 1fr);">
-          <div class="flex flex-col gap-2">
+        <div class="flex flex-wrap items-center justify-between w-full gap-4">
+          <div class="flex flex-col gap-2 flex-1">
             <label class="text-xs font-bold muted">Çalışma (dk)</label>
             <input type="number" id="pomoSetWork" value="25" min="1" max="60" onchange="window._updatePomoSettings()"/>
           </div>
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2 flex-1">
             <label class="text-xs font-bold muted">Kısa (dk)</label>
             <input type="number" id="pomoSetShort" value="5" min="1" max="30" onchange="window._updatePomoSettings()"/>
           </div>
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2 flex-1">
             <label class="text-xs font-bold muted">Uzun (dk)</label>
             <input type="number" id="pomoSetLong" value="15" min="1" max="60" onchange="window._updatePomoSettings()"/>
           </div>
@@ -1964,7 +1972,7 @@ textarea { resize: vertical; min-height: 100px; }
 
           <div>
             <label class="block font-bold text-sm mb-2">Ruh Hali</label>
-            <div class="flex flex-wrap items-center justify-center gap-2 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border); min-height: 70px;">
+            <div class="flex flex-row items-center justify-center gap-2 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border); min-height: 70px;">
               <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="exhausted" onclick="window._selectMood('exhausted')" aria-label="Tükenmiş">😫</button>
               <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="low" onclick="window._selectMood('low')" aria-label="Düşük">😕</button>
               <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="normal" onclick="window._selectMood('normal')" aria-label="Normal">😐</button>
@@ -2009,7 +2017,7 @@ textarea { resize: vertical; min-height: 100px; }
         </div>
 
         <div id="journalContent" class="hidden">
-          <div class="flex flex-wrap items-center justify-center gap-2 mb-4 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border); min-height: 60px;">
+          <div class="flex flex-row items-center justify-center gap-2 mb-4 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border); min-height: 60px;">
             <button class="btn-secondary j-mood-btn active flex-1 text-sm p-x-2" data-mood="🙂" onclick="window._selectJournalMood('🙂')" aria-pressed="true">Huzurlu</button>
             <button class="btn-secondary j-mood-btn flex-1 text-sm p-x-2" data-mood="😐" onclick="window._selectJournalMood('😐')" aria-pressed="false">Nötr</button>
             <button class="btn-secondary j-mood-btn flex-1 text-sm p-x-2" data-mood="😫" onclick="window._selectJournalMood('😫')" aria-pressed="false">Karmaşık</button>
@@ -2053,7 +2061,6 @@ textarea { resize: vertical; min-height: 100px; }
 
     <div class="tab-panel hidden" data-panel="profile" role="tabpanel">
       <div class="card flex flex-col items-center text-center mb-6">
-        <!-- Dosya seçme inputu eklendi -->
         <input type="file" id="avatarFileInput" accept="image/*" class="hidden" />
         
         <div id="avatarPreview" class="flex items-center justify-center text-white font-bold text-3xl mb-4 cursor-pointer" style="width:100px; height:100px; border-radius:50%; background:var(--accent); border: 4px solid var(--surface-solid); box-shadow: var(--shadow-md); transition: transform 0.2s;" title="Fotoğrafı Değiştir">
