@@ -508,7 +508,7 @@
     const hour = new Date().getHours();
     const name = profile.displayName || currentUser?.displayName || "Ziyaretçi";
     let greeting = "Günaydın";
-    if (hour >= 12 && hour < 17) greeting = "İyi Günler";
+    if (hour >= 12 && hour < 17) greeting = "İyi Öğlenler";
     else if (hour >= 17 && hour < 22) greeting = "İyi Akşamlar";
     else if (hour >= 22 || hour < 5) greeting = "İyi Geceler";
 
@@ -1881,6 +1881,11 @@ html.dark .tab-btn:hover { background: rgba(255,255,255,0.05); }
   width: 44px; height: 44px; border-radius: 50%;
   background: var(--surface-solid); border: 1px solid var(--border);
   display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm);
+}
+
+/* ── EN KRİTİK GİZLEME SINIFI ── */
+.hidden {
+  display: none !important;
 }
 </style>
 </head>
