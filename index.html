@@ -19,7 +19,8 @@
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, doc, setDoc, getDoc, collection,
-    addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc, initializeFirestore
+    addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc, initializeFirestore,
+    persistentLocalCache, persistentMultipleTabManager
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   // ── Firebase Yapılandırması (Çift Yönlü Uyumlu) ─────────────────────
@@ -38,8 +39,9 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   
-  // Çevrimdışı ve WebSocket engelleme hatalarını çözmek için Force Long Polling kullanılıyor
+  // Çevrimdışı destek (Offline Persistence) ve Force Long Polling entegrasyonu
   const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()}),
     experimentalForceLongPolling: true
   });
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -63,7 +65,7 @@
       const snap = await getDoc(doc(db, "artifacts", appId, "users", uid(), "profile", "main"));
       return snap.exists() ? snap.data() : {};
     } catch (err) {
-      console.error("Profil yüklenirken çevrimdışı hatası:", err);
+      console.error("Profil yüklenirken hata:", err);
       return {};
     }
   }
@@ -84,7 +86,7 @@
       const snap = await getDoc(doc(db, "artifacts", appId, "users", uid(), "tasks", "main"));
       return snap.exists() ? snap.data().list || [] : [];
     } catch (err) {
-      console.error("Görevler yüklenirken çevrimdışı hatası:", err);
+      console.error("Görevler yüklenirken hata:", err);
       return [];
     }
   }
@@ -105,7 +107,7 @@
       const snap = await getDoc(doc(db, "artifacts", appId, "users", uid(), "reports", date));
       return snap.exists() ? snap.data() : {};
     } catch (err) {
-      console.error("Rapor yüklenirken çevrimdışı hatası:", err);
+      console.error("Rapor yüklenirken hata:", err);
       return {};
     }
   }
@@ -117,7 +119,7 @@
       const snap = await getDocs(collection(db, "artifacts", appId, "users", uid(), "reports"));
       return snap.docs.map(d => d.data()).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 7);
     } catch (err) {
-      console.error("Geçmiş raporlar yüklenirken çevrimdışı hatası:", err);
+      console.error("Geçmiş raporlar yüklenirken hata:", err);
       return [];
     }
   }
@@ -140,7 +142,7 @@
       const snap = await getDocs(collection(db, "artifacts", appId, "users", uid(), "journals"));
       return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
     } catch (err) {
-      console.error("Günlükler yüklenirken çevrimdışı hatası:", err);
+      console.error("Günlükler yüklenirken hata:", err);
       return [];
     }
   }
@@ -172,7 +174,7 @@
       const snap = await getDocs(collection(db, "artifacts", appId, "users", uid(), "braindump"));
       return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
     } catch (err) {
-      console.error("Notlar yüklenirken çevrimdışı hatası:", err);
+      console.error("Notlar yüklenirken hata:", err);
       return [];
     }
   }
@@ -229,7 +231,6 @@
 
   /* ── DOM Hazırlığı ve Başlangıç ── */
   document.addEventListener("DOMContentLoaded", () => {
-    // Shimmer Loader Başlat
     showSkeleton(true);
 
     const initAuth = async () => {
@@ -248,17 +249,19 @@
     onAuthStateChanged(auth, async user => {
       currentUser = user;
       if (user) {
-        profile = await loadUserProfile();
-        
-        // Streak Yönetimi
-        handleStreakCalculation();
-
-        applyTheme(profile.theme || "light");
-        applyAccent(profile.accent || "indigo");
-        tasks = await loadTasks();
-        showApp();
-        renderAll();
-        showSkeleton(false);
+        try {
+          profile = await loadUserProfile();
+          await handleStreakCalculation();
+          applyTheme(profile.theme || "light");
+          applyAccent(profile.accent || "indigo");
+          tasks = await loadTasks();
+          showApp();
+          renderAll();
+        } catch (err) {
+          console.error("Başlangıç verileri yüklenirken hata:", err);
+        } finally {
+          showSkeleton(false);
+        }
       } else {
         showAuth();
         showSkeleton(false);
@@ -292,6 +295,7 @@
         }
       } catch (err) {
         errEl.textContent = firebaseErrorMsg(err.code);
+      } finally {
         showSkeleton(false);
       }
     });
@@ -382,7 +386,6 @@
       document.getElementById("reportHow").value = r.how || "";
       document.getElementById("reportAchieved").value = r.achieved || "";
       document.getElementById("reportHard").value = r.hard || "";
-      // Mood ve Enerji seçicilerini güncelle
       setMoodSelection(r.mood || "");
       document.getElementById("reportEnergy").value = r.energy || 3;
       updateEnergyDisplay(r.energy || 3);
@@ -502,7 +505,6 @@
 
   /* ── 4. Dashboard (Yeni Ana Sayfa) ── */
   function renderDashboard() {
-    // Hoş geldin mesajı
     const hour = new Date().getHours();
     const name = profile.displayName || currentUser?.displayName || "Ziyaretçi";
     let greeting = "Günaydın";
@@ -512,7 +514,6 @@
 
     document.getElementById("dashboardGreeting").innerHTML = `${greeting}, <span class="font-extrabold text-accent">${escHtml(name)}</span>! 🌟`;
 
-    // İlerleme Dairesi
     const total = tasks.length;
     const completed = tasks.filter(t => t.done).length;
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -526,18 +527,12 @@
     textVal.textContent = `%${percent}`;
 
     document.getElementById("dashboardProgressStats").textContent = `${total} Görevden ${completed}'i Tamamlandı`;
-
-    // Streak Sayacı
     document.getElementById("dashboardStreakText").innerHTML = `Streak Günün: <span class="text-amber-500 font-bold">${profile.streak || 1} Gün 🔥</span>`;
 
-    // Motivasyon Sözü
     const savedQuoteIdx = Math.floor(Math.random() * adhdQuotes.length);
     document.getElementById("dashboardQuote").textContent = adhdQuotes[savedQuoteIdx];
-
-    // Özet Bilgiler
     document.getElementById("summaryTasks").textContent = `${completed}/${total} Görev`;
     
-    // Bugün rapor yazıldı mı?
     const todayStr = new Date().toISOString().split("T")[0];
     loadReport(todayStr).then(r => {
       const checkEl = document.getElementById("summaryReportCheck");
@@ -573,7 +568,6 @@
     const secs = pomodoroTimeLeft % 60;
     document.getElementById("pomoTimerText").textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 
-    // SVG Progress
     let max = 1500;
     if (pomodoroMode === 'work') max = pomodoroCustomWork * 60;
     else if (pomodoroMode === 'short') max = pomodoroCustomShort * 60;
@@ -712,7 +706,6 @@
     renderTasks();
   }
 
-  // Alt Görev (Subtask) Yönetimi
   window._addSubtask = async (taskId) => {
     const input = document.getElementById(`subtaskInput-${taskId}`);
     const text = input.value.trim();
@@ -722,11 +715,7 @@
     if (!task) return;
 
     if (!task.subtasks) task.subtasks = [];
-    task.subtasks.push({
-      id: Date.now(),
-      text,
-      done: false
-    });
+    task.subtasks.push({ id: Date.now(), text, done: false });
 
     input.value = "";
     await saveTasks(tasks);
@@ -754,7 +743,6 @@
     renderTasks();
   };
 
-  // Filtreleme & Arama
   let activeFilter = "all";
   window._filterTasks = (filter) => {
     activeFilter = filter;
@@ -764,7 +752,6 @@
     renderTasks();
   };
 
-  // Arama Tetikleyici
   document.getElementById("taskSearch").addEventListener("input", () => {
     renderTasks();
   });
@@ -773,7 +760,6 @@
     const list = document.getElementById("taskList");
     const searchVal = document.getElementById("taskSearch").value.toLowerCase();
     
-    // Üst İlerleme Çubuğu
     const total = tasks.length;
     const completed = tasks.filter(t => t.done).length;
     const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -782,12 +768,10 @@
 
     let filtered = tasks;
 
-    // Arama
     if (searchVal) {
       filtered = filtered.filter(t => t.text.toLowerCase().includes(searchVal));
     }
 
-    // Filtre
     if (activeFilter === "active") {
       filtered = filtered.filter(t => !t.done);
     } else if (activeFilter === "completed") {
@@ -838,7 +822,6 @@
             </div>
           </div>
 
-          <!-- Alt Görevler Paneli -->
           <div id="subtaskPanel-${t.id}" class="subtask-panel hidden">
             <div class="subtask-list mt-3">
               ${(t.subtasks || []).map(s => `
@@ -859,7 +842,6 @@
       `;
     }).join("");
 
-    // Drag & Drop
     list.querySelectorAll(".task-card").forEach(el => {
       el.addEventListener("dragstart", e => {
         dragSrcIdx = +el.dataset.idx;
@@ -908,7 +890,6 @@
     });
   }
 
-  // Enerji seviyesi renkli slider
   const energySlider = document.getElementById("reportEnergy");
   energySlider.addEventListener("input", (e) => {
     updateEnergyDisplay(e.target.value);
@@ -931,7 +912,6 @@
     document.getElementById("reportEnergy").value = energy;
     updateEnergyDisplay(energy);
 
-    // Otomatik Özet
     const completedList = tasks.filter(t => t.done).map(t => `• ${t.text}`).join("\n");
     document.getElementById("reportAutoCompleted").value = completedList || "Bugün tamamlanan görev yok.";
   }
@@ -985,7 +965,6 @@
     });
   };
 
-  // Karakter Sayacı
   const journalInput = document.getElementById("journalInput");
   journalInput.addEventListener("input", () => {
     const len = journalInput.value.length;
@@ -1080,7 +1059,6 @@
     const wrap = document.getElementById("quizWrap");
     const answeredCount = Object.keys(profile.quiz || {}).length;
     
-    // Quiz progress bar
     const progressPct = (answeredCount / quizQuestions.length) * 100;
     document.getElementById("quizProgressFill").style.width = `${progressPct}%`;
     document.getElementById("quizProgressRatio").textContent = `${answeredCount}/${quizQuestions.length}`;
@@ -1109,7 +1087,6 @@
     if (!profile.quiz) profile.quiz = {};
     profile.quiz[key] = val;
 
-    // Progress güncelle
     const answeredCount = Object.keys(profile.quiz).length;
     const pct = (answeredCount / quizQuestions.length) * 100;
     document.getElementById("quizProgressFill").style.width = `${pct}%`;
@@ -1158,12 +1135,10 @@
     document.getElementById("profileName").value = profile.displayName || currentUser?.displayName || "";
     document.getElementById("profileAccent").value = profile.accent || "indigo";
 
-    // Profil Sayfasındaki İstatistikler
     document.getElementById("statTotalTasks").textContent = tasks.length;
     document.getElementById("statStreak").textContent = `${profile.streak || 1} Gün`;
     document.getElementById("statPomodoros").textContent = `${profile.totalPomodoros || 0} Seans`;
 
-    // Avatar
     const wrap = document.getElementById("avatarChoices");
     const colors = ["#6366f1","#7c3aed","#e11d48","#0d9488","#d97706","#fb923c","#f87171"];
     wrap.innerHTML = colors.map(c => `
@@ -1202,7 +1177,6 @@
     el.style.background = profile.avatarColor || "#6366f1";
   }
 
-  // Veri Dışa Aktarma
   window._exportUserData = async () => {
     const dbEntries = await loadJournalEntries();
     const dbDumps = await loadBrainDumps();
@@ -1236,16 +1210,14 @@
 
     breathState = 'in';
     if (type === 'box') {
-      breathCycleTime = 4; // 4 saniye Al - Tut - Ver - Tut
+      breathCycleTime = 4;
     } else {
-      // 4-7-8 Tekniği
       breathCycleTime = 4;
     }
     breathTimeLeft = breathCycleTime;
 
     updateBreathingAnimation();
 
-    // Toplam süre sayacı
     breathTotalTimer = setInterval(() => {
       breathTotalDuration--;
       document.getElementById("breathTimeTotalVal").textContent = `${Math.floor(breathTotalDuration / 60)}:${(breathTotalDuration % 60).toString().padStart(2,'0')}`;
@@ -1256,18 +1228,15 @@
       }
     }, 1000);
 
-    // Döngü sayacı
     breathInterval = setInterval(() => {
       breathTimeLeft--;
       if (breathTimeLeft <= 0) {
-        // Durum geçişi
         if (type === 'box') {
           if (breathState === 'in') { breathState = 'holdIn'; breathTimeLeft = 4; }
           else if (breathState === 'holdIn') { breathState = 'out'; breathTimeLeft = 4; }
           else if (breathState === 'out') { breathState = 'holdOut'; breathTimeLeft = 4; }
           else if (breathState === 'holdOut') { breathState = 'in'; breathTimeLeft = 4; }
         } else {
-          // 4-7-8
           if (breathState === 'in') { breathState = 'holdIn'; breathTimeLeft = 7; }
           else if (breathState === 'holdIn') { breathState = 'out'; breathTimeLeft = 8; }
           else if (breathState === 'out') { breathState = 'in'; breathTimeLeft = 4; }
@@ -1388,24 +1357,30 @@
   function customConfirm(title, message) {
     return new Promise((resolve) => {
       const modal = document.getElementById("confirmModal");
-      const titleEl = document.getElementById("confirmTitle");
-      const msgEl = document.getElementById("confirmMessage");
-      const approveBtn = document.getElementById("confirmApproveBtn");
-      const cancelBtn = document.getElementById("confirmCancelBtn");
+      document.getElementById("confirmTitle").textContent = title;
+      document.getElementById("confirmMessage").textContent = message;
 
-      titleEl.textContent = title;
-      msgEl.textContent = message;
+      const oldApprove = document.getElementById("confirmApproveBtn");
+      const oldCancel = document.getElementById("confirmCancelBtn");
+
+      // Önceki dinleyicileri temizlemek için öğeleri DOM'da klonlayarak değiştiriyoruz
+      const approveBtn = oldApprove.cloneNode(true);
+      const cancelBtn = oldCancel.cloneNode(true);
+      oldApprove.replaceWith(approveBtn);
+      oldCancel.replaceWith(cancelBtn);
+
       modal.classList.remove("hidden");
 
+      let isResolved = false;
       const cleanup = (result) => {
+        if (isResolved) return;
+        isResolved = true;
         modal.classList.add("hidden");
-        approveBtn.onclick = null;
-        cancelBtn.onclick = null;
         resolve(result);
       };
 
-      approveBtn.onclick = () => cleanup(true);
-      cancelBtn.onclick = () => cleanup(false);
+      approveBtn.addEventListener("click", () => cleanup(true));
+      cancelBtn.addEventListener("click", () => cleanup(false));
     });
   }
 
@@ -1569,20 +1544,32 @@ textarea { resize: vertical; min-height: 100px; }
   box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.3);
   transition: transform .2s ease, box-shadow .2s ease, opacity .2s;
   display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  outline: none;
 }
 .btn-primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.4);
 }
 .btn-primary:active { transform: translateY(0); }
+.btn-primary:focus-visible { box-shadow: 0 0 0 3px var(--text); }
 
 .btn-secondary {
   background: var(--accent-bg); color: var(--accent);
   border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: .75rem 1.5rem; font-weight: 600; font-size: .95rem;
   transition: background .2s ease, transform .2s ease;
+  outline: none;
 }
 .btn-secondary:hover { background: rgba(var(--accent-rgb), 0.15); transform: translateY(-1px); }
+.btn-secondary:focus-visible { box-shadow: 0 0 0 3px var(--text); }
+
+.btn-danger {
+  background: #ef4444; color: #fff; border-radius: var(--radius-md); 
+  padding: .75rem 1rem; font-weight: 700; flex: 1; outline: none;
+  transition: opacity .2s;
+}
+.btn-danger:hover { opacity: 0.9; }
+.btn-danger:focus-visible { box-shadow: 0 0 0 3px var(--text); }
 
 /* ═══════ SKELETON LOADING ═══════ */
 .skeleton-overlay {
@@ -1852,9 +1839,9 @@ html.dark .tab-btn:hover { background: rgba(255,255,255,0.05); }
   padding: 1.6rem; width: 100%; max-width: 400px;
   box-shadow: var(--shadow-lg); border: 1px solid var(--border);
   animation: scaleUp .2s ease forwards;
+  pointer-events: auto;
 }
 .modal-actions { display: flex; gap: .5rem; margin-top: 1.2rem; }
-.btn-danger { background: #ef4444; color: #fff; border-radius: var(--radius-md); padding: .75rem 1rem; font-weight: 700; flex: 1; }
 
 .toast {
   position: fixed; bottom: 5.5rem; left: 50%; transform: translateX(-50%) translateY(20px);
