@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="tr" class="light">
+<html lang="tr" class="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>dailyFORmind – Zihnini Düzenle</title>
-<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22dailyFORmind%22%2C%22short_name%22%3A%22DFM%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22theme_color%22%3A%22%234f46e5%22%7D" />
+<title>DailyForMind – Zihnini Düzenle</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22DailyForMind%22%2C%22short_name%22%3A%22DFM%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f172a%22%2C%22theme_color%22%3A%22%234f46e5%22%7D" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@500;700&display=swap" rel="stylesheet">
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -18,7 +18,7 @@
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, doc, setDoc, getDoc, collection,
-    addDoc, getDocs, query, orderBy, deleteDoc, writeBatch
+    addDoc, getDocs, query, orderBy, deleteDoc
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   // PROD NOTU: Firestore Güvenlik Kuralları (Security Rules) yapılandırılmalıdır.
@@ -130,6 +130,22 @@
     catch (err) { console.error("Not silme hatası:", err); }
   }
 
+  // Jurnal sıfırlama yardımcı fonksiyonu
+  async function resetJournalData() {
+    if (!uid()) return;
+    try {
+      await saveUserProfile({ journalPin: null }); // Pin siliniyor
+      const snap = await getDocs(collection(db, "artifacts", appId, "users", uid(), "journals"));
+      for (const d of snap.docs) {
+        await deleteDoc(doc(db, "artifacts", appId, "users", uid(), "journals", d.id));
+      }
+      showToast("Tüm günlük verileri ve şifre sıfırlandı.", "ok");
+      journalLocked = true;
+      profile.journalPin = null;
+      renderJournal();
+    } catch (err) { console.error("Sıfırlama hatası:", err); showToast("Sıfırlama başarısız.", "error"); }
+  }
+
   let currentUser = null;
   let profile = {};
   let tasks = [];
@@ -166,6 +182,9 @@
   ];
 
   document.addEventListener("DOMContentLoaded", () => {
+    // Varsayılan olarak dark mod istendi
+    document.documentElement.classList.add("dark");
+    
     showSkeleton(true);
     requestNotificationPermission();
 
@@ -182,7 +201,7 @@
           try {
             profile = await loadUserProfile();
             await handleStreakCalculation();
-            applyTheme(profile.theme || "light");
+            applyTheme(profile.theme || "dark"); // Theme dark default
             applyAccent(profile.accent || "indigo");
             tasks = await loadTasks();
             showApp();
@@ -218,8 +237,8 @@
           const name = document.getElementById("authName")?.value.trim() || "Kullanıcı";
           await updateProfile(cred.user, { displayName: name });
           await saveUserProfile({ 
-            displayName: name, theme: "light", accent: "indigo",
-            streak: 1, lastActiveDate: new Date().toISOString().split("T")[0], totalPomodoros: 0
+            displayName: name, theme: "dark", accent: "indigo",
+            streak: 1, lastActiveDate: new Date().toISOString().split("T")[0], totalPomodoros: 0, avatarColor: "#4f46e5"
           });
         }
       } catch (err) { 
@@ -232,7 +251,7 @@
       const isLogin = e.target.dataset.mode === "login";
       e.target.dataset.mode = isLogin ? "register" : "login";
       const authTitle = document.getElementById("authTitle");
-      if(authTitle) authTitle.textContent = isLogin ? "Hoş Geldiniz" : "Kayıt Ol";
+      if(authTitle) authTitle.textContent = isLogin ? "Hoş Geldiniz" : "Hesap Oluştur";
       e.target.textContent = isLogin ? "Zaten bir hesabınız var mı? Giriş yapın" : "Yeni misiniz? Hemen kayıt olun";
       const submitBtn = document.getElementById("authSubmitBtn");
       if(submitBtn) submitBtn.textContent = isLogin ? "Hesap Oluştur" : "Giriş Yap";
@@ -240,37 +259,74 @@
       if(nameWrap) nameWrap.classList.toggle("hidden", isLogin);
     });
 
-    document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    // Dropdown events
+    document.getElementById("headerAvatar")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const dd = document.getElementById("profileDropdown");
+      if(dd) dd.classList.toggle("hidden");
+    });
+    
+    document.addEventListener("click", (e) => {
+      const dd = document.getElementById("profileDropdown");
+      const avatar = document.getElementById("headerAvatar");
+      if(dd && !dd.classList.contains("hidden") && e.target !== avatar && !avatar.contains(e.target) && e.target !== dd && !dd.contains(e.target)) {
+        dd.classList.add("hidden");
+      }
+    });
+
+    document.getElementById("dd-logout")?.addEventListener("click", async () => {
       const confirmLogout = await customConfirm("Çıkış Yap", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?");
       if (confirmLogout) await signOut(auth);
+    });
+    
+    document.getElementById("dd-theme")?.addEventListener("click", async () => {
+      const isDark = document.documentElement.classList.toggle("dark");
+      const theme = isDark ? "dark" : "light";
+      profile.theme = theme;
+      if (uid()) await saveUserProfile({ theme });
+    });
+    
+    document.getElementById("dd-profile")?.addEventListener("click", () => {
+      switchTab('profile', document.querySelector(`.tab-btn[data-tab="profile"]`));
+      document.getElementById("profileDropdown")?.classList.add("hidden");
     });
 
     document.querySelectorAll(".tab-btn").forEach(btn => {
       btn?.addEventListener("click", () => switchTab(btn.dataset.tab, btn));
     });
 
-    document.getElementById("themeToggle")?.addEventListener("click", async () => {
-      const isDark = document.documentElement.classList.toggle("dark");
-      const theme = isDark ? "dark" : "light";
-      profile.theme = theme;
-      if (uid()) await saveUserProfile({ theme });
-    });
-
+    /* Tab: Tasks */
     document.getElementById("taskInput")?.addEventListener("keydown", async e => { if (e.key === "Enter") await addTask(); });
     document.getElementById("addTaskBtn")?.addEventListener("click", addTask);
+    
+    /* Tab: Profile */
     document.getElementById("saveProfileBtn")?.addEventListener("click", saveProfile);
+    document.getElementById("avatarUrlInput")?.addEventListener("input", (e) => {
+      const preview = document.getElementById("avatarPreview");
+      if(preview) preview.style.backgroundImage = `url('${e.target.value}')`;
+      if(preview) preview.textContent = e.target.value ? "" : (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
+    });
+
+    /* Tab: Report */
     document.getElementById("saveReportBtn")?.addEventListener("click", saveReport_);
     
+    /* Tab: Journal */
     document.getElementById("journalUnlockBtn")?.addEventListener("click", checkJournalPin);
     document.getElementById("journalPinInput")?.addEventListener("keydown", e => { if (e.key === "Enter") checkJournalPin(); });
     document.getElementById("journalLockBtn")?.addEventListener("click", () => { journalLocked = true; renderJournal(); });
     document.getElementById("saveJournalBtn")?.addEventListener("click", saveJournalEntry_);
+    document.getElementById("resetJournalBtn")?.addEventListener("click", async () => {
+       const confirmReset = await customConfirm("Günlüğü Sıfırla", "Tüm günlük verileri ve parolanız SİLİNECEKTİR. Onaylıyor musunuz?");
+       if(confirmReset) await resetJournalData();
+    });
 
+    /* Brain Dump */
     document.getElementById("brainDumpFab")?.addEventListener("click", toggleBrainDump);
     document.getElementById("closeBrainDump")?.addEventListener("click", () => { document.getElementById("brainDumpPanel")?.classList.add("hidden"); });
     document.getElementById("sendBrainDump")?.addEventListener("click", sendBrainDump);
     document.getElementById("brainDumpText")?.addEventListener("keydown", e => { if (e.key === "Enter" && e.ctrlKey) sendBrainDump(); });
 
+    /* Profile Theme Buttons */
     document.querySelectorAll(".accent-btn").forEach(btn => {
       btn?.addEventListener("click", async () => {
         const accent = btn.dataset.accent;
@@ -281,20 +337,10 @@
       });
     });
 
+    /* Tab: Quiz */
     document.getElementById("saveQuizBtn")?.addEventListener("click", saveQuiz);
     
-    const today = new Date().toISOString().split("T")[0];
-    const reportDateInput = document.getElementById("reportDate");
-    if(reportDateInput) reportDateInput.value = today;
-    
-    if(reportDateInput) {
-      reportDateInput.addEventListener("change", async e => {
-        showSkeleton(true);
-        await loadReportForToday();
-        showSkeleton(false);
-      });
-    }
-
+    /* Global Keys */
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.altKey) && e.key >= "1" && e.key <= "7") {
         const activeEl = document.activeElement;
@@ -309,6 +355,7 @@
       }
     });
 
+    /* Scroll To Top */
     const scrollTopBtn = document.getElementById("scrollTopBtn");
     window.addEventListener("scroll", () => {
       if (window.scrollY > 300) scrollTopBtn?.classList.remove("hidden");
@@ -392,6 +439,9 @@
     renderProfile();
     renderJournal();
     renderBrainDumps();
+    const today = new Date().toISOString().split("T")[0];
+    const reportDateInput = document.getElementById("reportDate");
+    if(reportDateInput) reportDateInput.value = today;
     loadReportForToday();
     loadQuiz();
     updateHeaderAvatar();
@@ -507,7 +557,7 @@
       clearInterval(pomodoroInterval);
       pomodoroIsRunning = false;
       const startBtn = document.getElementById("pomoStartBtn");
-      if(startBtn) startBtn.textContent = "Başlat";
+      if(startBtn) startBtn.innerHTML = "<svg width='18' height='18' viewBox='0 0 24 24' fill='currentColor'><path d='M8 5v14l11-7z'/></svg> Başlat";
     }
   };
 
@@ -537,10 +587,10 @@
     if (pomodoroIsRunning) {
       clearInterval(pomodoroInterval);
       pomodoroIsRunning = false;
-      if(startBtn) startBtn.textContent = "Devam Et";
+      if(startBtn) startBtn.innerHTML = "<svg width='18' height='18' viewBox='0 0 24 24' fill='currentColor'><path d='M8 5v14l11-7z'/></svg> Devam Et";
     } else {
       pomodoroIsRunning = true;
-      if(startBtn) startBtn.textContent = "Duraklat";
+      if(startBtn) startBtn.innerHTML = "<svg width='18' height='18' viewBox='0 0 24 24' fill='currentColor'><path d='M6 19h4V5H6v14zm8-14v14h4V5h-4z'/></svg> Duraklat";
       pomodoroInterval = setInterval(() => {
         pomodoroTimeLeft--;
         if (pomodoroTimeLeft <= 0) {
@@ -571,7 +621,7 @@
     clearInterval(pomodoroInterval);
     pomodoroIsRunning = false;
     const startBtn = document.getElementById("pomoStartBtn");
-    if(startBtn) startBtn.textContent = "Başlat";
+    if(startBtn) startBtn.innerHTML = "<svg width='18' height='18' viewBox='0 0 24 24' fill='currentColor'><path d='M8 5v14l11-7z'/></svg> Başlat";
     _setPomodoroMode(pomodoroMode);
   };
 
@@ -639,7 +689,7 @@
     }
     
     renderDashboard();
-    setTimeout(renderTasks, 400); // Wait for anim
+    setTimeout(renderTasks, 400);
   }
 
   async function deleteTask(id) {
@@ -951,7 +1001,9 @@
     if(!input) return;
     const entered = input.value;
     const stored = profile.journalPin || "";
-    const hashedEntered = await hashPin(entered);
+    
+    // Eğer null dönerse (sıfırlandıysa) hash'leme, direkt boş kalsın. Aksi taktirde girilen değeri hash'le.
+    const hashedEntered = entered ? await hashPin(entered) : "";
 
     if (!stored) {
       if (entered.length < 4) { showToast("Güvenlik için en az 4 karakter gereklidir.", "warn"); return; }
@@ -1019,9 +1071,11 @@
   const quizQuestions = [
     { key: "focusTime",   label: "En verimli saatiniz?",        opts: ["Sabah","Öğlen","Öğleden Sonra","Akşam","Gece"] },
     { key: "motivation",  label: "Motivasyon kaynağınız?",      opts: ["Ödüller","Rekabet","Merak","Yaratıcılık","Sosyal Onay"] },
-    { key: "distraction", label: "Birincil dikkat dağıtıcınız?",opts: ["Telefon","Sesler","Yorgunluk","Açlık","Düşünceler"] },
-    { key: "taskStyle",   label: "Görev yaklaşımınız?",         opts: ["Planlı","Tek Tek","Çoklu İş","Son Dakika"] },
-    { key: "recharge",    label: "Enerji yenileme yönteminiz?", opts: ["Yalnız","Sosyalleşerek","Hareket","Uyuyarak"] },
+    { key: "distraction", label: "Birincil dikkat dağıtıcınız?",opts: ["Telefon","Sesler","Yorgunluk","Açlık","Düşünceler", "Görsel Uyaranlar"] },
+    { key: "taskStyle",   label: "Görev yaklaşımınız?",         opts: ["Planlı","Tek Tek","Çoklu İş","Son Dakika", "Rastgele"] },
+    { key: "recharge",    label: "Enerji yenileme yönteminiz?", opts: ["Yalnız","Sosyalleşerek","Hareket","Uyuyarak", "Hobilerle"] },
+    { key: "stress",      label: "Stres anında tepkiniz?",      opts: ["Dondurma (Eylemsizlik)","Kaçma","Saldırı (Sinir)","Aşırı analiz"] },
+    { key: "workspace",   label: "İdeal çalışma ortamınız?",    opts: ["Sessiz ofis","Kafe gürültüsü","Müzikli","Doğada","Fark etmez"] }
   ];
 
   function loadQuiz() {
@@ -1095,6 +1149,7 @@
         <p class="text-sm font-medium mb-3 line-height-large">
           Sizin en verimli zaman diliminiz <strong>${escHtml(qData.focusTime)}</strong> olarak belirlenmiştir. 
           Motivasyon motorunuz <strong>${escHtml(qData.motivation)}</strong> ile beslenmektedir.
+          İdeal çalışma ortamınız olan <strong>${escHtml(qData.workspace)}</strong>'da bulunmanız üretkenliğinizi artırır.
         </p>
         <div class="border-t border-muted my-3 opacity-50"></div>
         <p class="text-xs font-bold muted">
@@ -1108,6 +1163,10 @@
     const nameEl = document.getElementById("profileName");
     if(nameEl) nameEl.value = profile.displayName || currentUser?.displayName || "";
     
+    // Fotoğraf URL'sini yansıt (Varsa URL göster, yoksa null)
+    const photoInput = document.getElementById("avatarUrlInput");
+    if(photoInput) photoInput.value = profile.photoURL || "";
+    
     const tTasks = document.getElementById("statTotalTasks");
     if(tTasks) tTasks.textContent = tasks.length;
     const sStreak = document.getElementById("statStreak");
@@ -1117,18 +1176,27 @@
 
     const wrap = document.getElementById("avatarChoices");
     if(wrap) {
-      const colors = ["#4f46e5","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#ef4444","#10b981"];
+      const colors = ["#4f46e5","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#f97316","#ef4444"];
       wrap.innerHTML = colors.map(c => `
-        <button class="avatar-circle ${profile.avatarColor === c ? "ring-2 ring-offset-2 ring-accent" : ""}"
-                style="background:${c}; width:40px; height:40px; border-radius:50%; border:none;" data-color="${c}"
-                onclick="window._pickAvatar('${c}')" aria-label="Renk seç" aria-pressed="${profile.avatarColor === c}"></button>
+        <button class="avatar-circle ${profile.avatarColor === c ? "active-avatar" : ""}"
+                style="background:${c};" data-color="${c}"
+                onclick="window._pickAvatar('${c}')" aria-label="Renk seç"></button>
       `).join("");
     }
     
     const preview = document.getElementById("avatarPreview");
-    if(preview) preview.style.background = profile.avatarColor || "#4f46e5";
-    const initial = document.getElementById("avatarInitial");
-    if(initial) initial.textContent = (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
+    if(preview) {
+        if(profile.photoURL) {
+            preview.style.backgroundImage = `url('${profile.photoURL}')`;
+            preview.style.backgroundSize = 'cover';
+            preview.style.backgroundPosition = 'center';
+            preview.textContent = "";
+        } else {
+            preview.style.backgroundImage = 'none';
+            preview.style.background = profile.avatarColor || "#4f46e5";
+            preview.textContent = (profile.displayName || currentUser?.displayName || "D")[0].toUpperCase();
+        }
+    }
   }
 
   window._pickAvatar = async (color) => {
@@ -1142,19 +1210,34 @@
     const nameEl = document.getElementById("profileName");
     if(!nameEl) return;
     const name = nameEl.value.trim();
+    
+    const photoEl = document.getElementById("avatarUrlInput");
+    const photoURL = photoEl ? photoEl.value.trim() : "";
+    
     profile.displayName = name;
-    await saveUserProfile({ displayName: name });
-    await updateProfile(auth.currentUser, { displayName: name });
+    profile.photoURL = photoURL;
+    
+    await saveUserProfile({ displayName: name, photoURL });
+    await updateProfile(auth.currentUser, { displayName: name, photoURL });
     updateHeaderAvatar();
     renderDashboard();
+    renderProfile(); // Preivew yenilemesi
     showToast("Profil güncellendi.");
   }
 
   function updateHeaderAvatar() {
     const el = document.getElementById("headerAvatar");
     if(el) {
-      el.textContent = (profile.displayName || currentUser?.displayName || "U")[0].toUpperCase();
-      el.style.background = profile.avatarColor || "#4f46e5";
+        if(profile.photoURL) {
+            el.style.backgroundImage = `url('${profile.photoURL}')`;
+            el.style.backgroundSize = 'cover';
+            el.style.backgroundPosition = 'center';
+            el.textContent = "";
+        } else {
+             el.style.backgroundImage = 'none';
+             el.textContent = (profile.displayName || currentUser?.displayName || "D")[0].toUpperCase();
+             el.style.background = profile.avatarColor || "#4f46e5";
+        }
     }
   }
 
@@ -1418,6 +1501,636 @@
 </script>
 
 <style>
-/* (Style is untouched) ... */
+:root {
+  --accent: #4f46e5;
+  --accent-dark: #3730a3;
+  --accent-bg: rgba(79, 70, 229, 0.08);
+  --accent-rgb: 79, 70, 229;
+  --accent-grad: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+  
+  --bg: #f3f4f6;
+  --surface: rgba(255, 255, 255, 0.95);
+  --surface-solid: #ffffff;
+  --border: rgba(209, 213, 219, 0.8);
+  --text: #111827;
+  --text-muted: #4b5563;
+  
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 20px rgba(var(--accent-rgb), 0.3);
+  
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --duration-base: 0.3s;
+}
+
+html.dark {
+  --bg: #0f172a;
+  --surface: rgba(31, 41, 55, 0.95);
+  --surface-solid: #1e293b;
+  --border: rgba(51, 65, 85, 0.8);
+  --text: #f8fafc;
+  --text-muted: #cbd5e1;
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, sans-serif, 'Outfit', 'Plus Jakarta Sans';
+  background: var(--bg); color: var(--text);
+  min-height: 100dvh; transition: background var(--duration-base) ease, color var(--duration-base) ease;
+  overflow-x: hidden; line-height: 1.5;
+}
+
+/* Utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+.gap-2 { gap: 0.5rem; }
+.gap-4 { gap: 1rem; }
+.w-full { width: 100%; }
+.text-center { text-align: center; }
+.font-bold { font-weight: 700; }
+.font-medium { font-weight: 500; }
+.text-xs { font-size: 0.75rem; }
+.text-sm { font-size: 0.875rem; }
+.text-lg { font-size: 1.125rem; }
+.text-xl { font-size: 1.25rem; }
+.text-2xl { font-size: 1.5rem; }
+.text-3xl { font-size: 1.875rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-3 { margin-bottom: 0.75rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 0.75rem; }
+.mt-4 { margin-top: 1rem; }
+.p-x-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+.p-x-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+.p-x-4 { padding-left: 1rem; padding-right: 1rem; }
+.p-y-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.p-y-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.p-y-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.p-y-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.border-b { border-bottom: 1px solid var(--border); }
+
+.bg-mesh {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -2;
+  overflow: hidden; pointer-events: none;
+}
+.mesh-blob {
+  position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.2;
+  animation: floatMesh 20s infinite alternate ease-in-out;
+}
+.blob-1 { width: 350px; height: 350px; background: var(--accent); top: -10%; left: -10%; }
+.blob-2 { width: 450px; height: 450px; background: #0ea5e9; bottom: -20%; right: -10%; animation-delay: -5s; }
+@keyframes floatMesh { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(40px) scale(1.1); } }
+
+.glass-header { background: var(--surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
+.card { background: var(--surface-solid); border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-sm); border: 1px solid var(--border); transition: transform var(--duration-base); }
+.card:focus-within { box-shadow: 0 0 0 3px var(--accent-bg); }
+
+input, textarea, select {
+  font-family: inherit; color: var(--text); background: var(--bg); border: 2px solid var(--border);
+  border-radius: var(--radius-md); padding: .75rem 1rem; width: 100%; font-weight: 500; transition: border-color var(--duration-base);
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; min-height: 100px; }
+.muted { color: var(--text-muted); }
+
+.brand-logo-container { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 2rem; user-select: none; }
+.dfm-svg-logo { width: 180px; height: auto; margin-bottom: 0.5rem; }
+.brand-logo-bottom { font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 500; letter-spacing: -0.02em; color: var(--accent); margin-top: 0.2rem; }
+
+.btn-primary {
+  background: var(--accent-grad); color: #fff; border-radius: var(--radius-md); padding: .85rem 1.5rem;
+  font-weight: 700; font-size: 1rem; border: none; cursor: pointer; transition: transform var(--duration-base), opacity var(--duration-base); min-height: 44px;
+}
+.btn-primary:hover { transform: translateY(-2px); opacity: 0.95; box-shadow: 0 6px 15px rgba(var(--accent-rgb), 0.3); }
+.btn-primary:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+
+.btn-secondary {
+  background: var(--bg); color: var(--text); border: 2px solid var(--border); border-radius: var(--radius-md);
+  padding: .75rem 1.2rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all var(--duration-base); min-height: 44px;
+}
+.btn-secondary:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); transform: translateY(-1px); }
+.btn-secondary:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+
+.btn-danger { background: #ef4444; color: #fff; border-radius: var(--radius-md); padding: .85rem 1.5rem; font-weight: 700; border: none; min-height: 44px; cursor: pointer; }
+
+/* Header & Dropdown */
+.app-header { padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+.profile-dropdown-container { position: relative; }
+.profile-dropdown { position: absolute; top: 100%; right: 0; margin-top: 0.5rem; width: 220px; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); overflow: hidden; animation: slideDown 0.2s ease forwards; z-index: 60; }
+.dd-item { padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.5rem; font-weight: 500; font-size: 0.9rem; cursor: pointer; transition: background 0.2s; color: var(--text); background: transparent; border: none; width: 100%; text-align: left; }
+.dd-item:hover { background: var(--accent-bg); color: var(--accent); }
+.dd-item.danger { color: #ef4444; }
+.dd-item.danger:hover { background: #fee2e2; }
+
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+.tabs-outer { position: sticky; top: 68px; z-index: 45; }
+.tabs { display: flex; justify-content: center; gap: 0.5rem; padding: 0.8rem 1.2rem; scrollbar-width: none; scroll-behavior: smooth; overflow-x: auto; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn { padding: 0.6rem 1.2rem; font-size: 0.9rem; font-weight: 600; color: var(--text-muted); border-radius: 999px; border: none; background: transparent; cursor: pointer; transition: all var(--duration-base); min-height: 44px; white-space: nowrap; }
+.tab-btn:hover { background: var(--border); color: var(--text); }
+.tab-active { color: #fff !important; background: var(--accent-grad) !important; font-weight: 700; box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.2); }
+
+.app-main { flex: 1; padding: 1.5rem 1rem; max-width: 800px; width: 100%; margin: 0 auto; transition: opacity var(--duration-base); }
+.card-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 0.8rem; }
+
+.dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; }
+@media(min-width: 480px) { .dashboard-grid { grid-template-columns: 1fr 1fr; } }
+
+.p-progress-svg { width: 90px; height: 90px; transform: rotate(-90deg); filter: drop-shadow(0 4px 6px rgba(var(--accent-rgb), 0.2)); }
+.display-number { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 2.2rem; letter-spacing: -0.02em; }
+
+/* Heatmap */
+.heatmap-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0.5rem; }
+.heatmap-box { width: 14px; height: 14px; border-radius: 4px; background: var(--border); border: 1px solid transparent; }
+
+.task-card { background: var(--surface-solid); border-radius: var(--radius-md); border: 1px solid var(--border); transition: transform var(--duration-base); margin-bottom: 0.8rem; overflow: hidden; position: relative; }
+.prio-strip { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.task-card.done .task-text { opacity: 0.6; text-decoration: line-through; }
+@keyframes popIn { 0% { transform: scale(0.8); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+.check-btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; border: none; background: transparent; }
+.icon-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: none; background: var(--surface-solid); border: 1px solid var(--border); cursor: pointer; color: var(--text-muted); transition: all 0.2s;}
+.icon-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.icon-btn.del:hover { background: #fee2e2; color: #ef4444; border-color: #ef4444; }
+
+.pomo-time-display { font-size: 3.5rem; color: var(--accent); }
+
+#brainDumpFab { position: fixed; bottom: calc(2rem + env(safe-area-inset-bottom)); right: 1.5rem; z-index: 99; width: 60px; height: 60px; border-radius: 50%; background: var(--accent-grad); color: #fff; font-size: 1.5rem; box-shadow: var(--shadow-lg); display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: transform 0.2s;}
+#brainDumpFab:hover { transform: scale(1.1) rotate(10deg); }
+
+#brainDumpPanel { position: fixed; bottom: calc(6.5rem + env(safe-area-inset-bottom)); right: 1.5rem; z-index: 98; width: min(350px, calc(100vw - 3rem)); max-height: 80dvh; border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-lg); background: var(--surface-solid); border: 1px solid var(--border); overflow-y: auto; }
+
+.skeleton-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 1.5rem; }
+.modal-card { background: var(--surface-solid); border-radius: var(--radius-lg); padding: 2rem; width: 100%; max-width: 400px; box-shadow: var(--shadow-lg); animation: scaleUp 0.3s forwards; }
+
+.toast { position: fixed; bottom: calc(6rem + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(20px); padding: 1rem 1.5rem; border-radius: var(--radius-xl); font-size: 0.9rem; box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; z-index: 3000; background: var(--surface-solid); border: 2px solid var(--border); font-weight: 600;}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.ok { border-color: var(--accent); color: var(--accent); }
+.toast.error { border-color: #ef4444; color: #ef4444; }
+
+.shake-anim { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-4px); } 40%, 60% { transform: translateX(4px); } }
+
+.hidden { display: none !important; }
+
+/* Profil Avatar Settings */
+.avatar-circle { width: 44px; height: 44px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.2s; }
+.avatar-circle:hover { transform: scale(1.1); }
+.active-avatar { border-color: var(--text); transform: scale(1.1); box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.4); }
+
+@keyframes scaleUp { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 </style>
-...
+</head>
+<body>
+
+<div class="bg-mesh">
+  <div class="mesh-blob blob-1"></div>
+  <div class="mesh-blob blob-2"></div>
+</div>
+
+<div id="skeletonLoader" class="skeleton-overlay hidden">
+  <div class="shimmer" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 1rem; background: var(--border);"></div>
+  <div class="shimmer" style="width: 200px; height: 24px; border-radius: 4px; background: var(--border);"></div>
+</div>
+
+<div id="authScreen" class="hidden" style="min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+  <div class="card w-full" style="max-width: 400px; padding: 3rem 2rem;">
+    <div class="brand-logo-container">
+      <!-- SVG Referans Logo -->
+      <svg class="dfm-svg-logo" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M75 100 V60 C75 50, 85 45, 95 45 C105 45, 115 50, 115 60 V100" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"/>
+        <path d="M95 45 C95 20, 115 10, 130 25 C145 40, 115 60, 95 45" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" fill="none"/>
+        <path d="M110 35 C130 15, 150 25, 140 45" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" fill="none"/>
+        <path d="M120 50 C140 50, 150 65, 135 75" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" fill="none"/>
+        <circle cx="145" cy="15" r="4" fill="#0ea5e9" />
+        <path d="M40 60 H60 Q70 60 70 70 V90 Q70 100 60 100 H40 V60 Z" fill="var(--accent-dark)"/>
+        <path d="M130 100 V60 L145 80 L160 60 V100" stroke="var(--accent-dark)" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M85 60 H105" stroke="var(--accent-dark)" stroke-width="12" stroke-linecap="round"/>
+        <path d="M85 80 H100" stroke="var(--accent-dark)" stroke-width="12" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-logo-bottom">DailyForMind</div>
+    </div>
+    
+    <h2 id="authTitle" class="text-xl font-bold text-center mb-6">Giriş Yap</h2>
+    <form id="authForm">
+      <div id="authNameWrap" class="mb-4 hidden">
+        <label class="block font-bold text-sm mb-2 muted">İsminiz</label>
+        <input id="authName" type="text" placeholder="Adınız" autocomplete="name" />
+      </div>
+      <div class="mb-4">
+        <label class="block font-bold text-sm mb-2 muted">E-posta</label>
+        <input id="authEmail" type="email" placeholder="ornek@mail.com" required autocomplete="email" />
+      </div>
+      <div class="mb-6">
+        <label class="block font-bold text-sm mb-2 muted">Şifre</label>
+        <input id="authPass" type="password" placeholder="••••••" required autocomplete="current-password" />
+      </div>
+      <div id="authError" class="text-sm font-bold mb-4 text-center" style="color:#ef4444;"></div>
+      <button type="submit" id="authSubmitBtn" class="btn-primary w-full">Giriş Yap</button>
+      
+      <div class="text-center mt-4">
+        <button type="button" id="authToggleMode" style="background:none; border:none; color:var(--accent); font-weight:700; font-size:0.9rem; cursor:pointer;">
+          Yeni misiniz? Kayıt olun
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="appScreen" class="hidden flex-col">
+  <header class="app-header glass-header">
+    <div class="flex flex-col">
+      <span class="font-bold text-accent" style="font-size: 1.4rem; letter-spacing:-0.03em;">DFM</span>
+    </div>
+    <div class="profile-dropdown-container">
+      <div id="headerAvatar" class="flex items-center justify-center font-bold text-white cursor-pointer" style="width: 40px; height: 40px; border-radius: 50%; background: var(--accent); box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.3);">
+        <span id="avatarInitial">U</span>
+      </div>
+      
+      <div id="profileDropdown" class="profile-dropdown hidden">
+        <div class="p-y-2 p-x-3 border-b bg-mesh" style="opacity:0.8;">
+          <p class="text-xs font-bold muted">Hesap Seçenekleri</p>
+        </div>
+        <button id="dd-profile" class="dd-item">👤 Profile Git</button>
+        <button id="dd-theme" class="dd-item">🌙 Temayı Değiştir</button>
+        <button id="dd-logout" class="dd-item danger">🚪 Çıkış Yap</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs-outer glass-header">
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn tab-active" data-tab="dashboard" role="tab" aria-selected="true">🏠 Panel</button>
+      <button class="tab-btn" data-tab="tasks" role="tab" aria-selected="false">✅ Görevler</button>
+      <button class="tab-btn" data-tab="pomodoro" role="tab" aria-selected="false">⏱️ Pomo</button>
+      <button class="tab-btn" data-tab="report" role="tab" aria-selected="false">📊 Rapor</button>
+      <button class="tab-btn" data-tab="journal" role="tab" aria-selected="false">🔐 Günlük</button>
+      <button class="tab-btn" data-tab="quiz" role="tab" aria-selected="false">🧬 Analiz</button>
+    </nav>
+  </div>
+
+  <main class="app-main">
+    <div class="tab-panel" data-panel="dashboard" role="tabpanel">
+      <h2 id="dashboardGreeting" class="text-2xl font-bold mb-6">Yükleniyor...</h2>
+      
+      <div class="dashboard-grid mb-6">
+        <div class="card flex items-center gap-4">
+          <svg class="p-progress-svg" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="34" stroke="var(--border)" stroke-width="8" fill="transparent"/>
+            <circle id="dashboardProgressCircle" cx="40" cy="40" r="34" stroke="var(--accent)" stroke-width="8" fill="transparent" stroke-dasharray="213.6" stroke-dashoffset="213.6" stroke-linecap="round" style="transition: stroke-dashoffset 1s ease-out;"/>
+          </svg>
+          <div>
+            <div id="dashboardProgressText" class="display-number text-accent">%0</div>
+            <p id="dashboardProgressStats" class="text-sm font-medium muted"></p>
+          </div>
+        </div>
+
+        <div class="card flex flex-col justify-center">
+          <div id="dashboardStreakText" class="flex items-center mb-2">Yükleniyor...</div>
+          <div class="heatmap-container" id="streakHeatmap" aria-label="Aktivite Isı Haritası"></div>
+        </div>
+      </div>
+
+      <div class="card mb-6" style="border-left: 4px solid var(--accent);">
+        <p id="dashboardQuote" class="font-medium text-lg italic">Yükleniyor...</p>
+      </div>
+
+      <div class="card mb-6">
+        <div class="card-title">⚡ Hızlı İşlemler</div>
+        <div class="dashboard-grid" style="margin-top:0;">
+          <button class="btn-secondary" onclick="document.querySelector('.tab-btn[data-tab=\'tasks\']').click()">Görevlere Git</button>
+          <button class="btn-secondary" onclick="document.querySelector('.tab-btn[data-tab=\'pomodoro\']').click()">Odaklan</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📅 Gün Sonu Durumu</div>
+        <div class="flex justify-between items-center mb-2 font-medium text-sm">
+          <span class="muted">Görev İlerlemesi</span>
+          <span id="summaryTasks" class="font-bold text-accent">0/0</span>
+        </div>
+        <div class="flex justify-between items-center font-medium text-sm">
+          <span class="muted">Kapanış Raporu</span>
+          <span id="summaryReportCheck">...</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="tasks" role="tabpanel">
+      <div class="card">
+        <div class="card-title">✅ İş Listesi</div>
+        
+        <div class="flex justify-between font-bold text-sm muted mb-2">
+          <span>Tamamlanma Oranı</span>
+          <span id="taskProgressRatio">0/0</span>
+        </div>
+        <div style="background:var(--bg); height:8px; border-radius:8px; overflow:hidden; margin-bottom:1.5rem;">
+          <div id="taskProgressFill" style="background:var(--accent); height:100%; width:0%; transition:width 1s ease;"></div>
+        </div>
+
+        <div class="flex flex-col gap-4 mb-6">
+          <input id="taskInput" type="text" placeholder="Yeni görev başlığı..." />
+          <div class="flex flex-wrap gap-2">
+            <input type="date" id="taskDueDate" class="flex-1" style="min-width: 130px;" aria-label="Bitiş Tarihi" />
+            <select id="taskPriority" class="flex-1" style="min-width:100px;" aria-label="Öncelik">
+              <option value="medium">Orta</option>
+              <option value="high">Yüksek</option>
+              <option value="low">Düşük</option>
+            </select>
+            <select id="taskCategory" class="flex-1" style="min-width:100px;" aria-label="Kategori">
+              <option value="kisisel">Kişisel</option>
+              <option value="is">İş</option>
+              <option value="saglik">Sağlık</option>
+              <option value="egitim">Eğitim</option>
+            </select>
+            <button id="addTaskBtn" class="btn-primary flex-1" style="min-width:100px;">Ekle</button>
+          </div>
+        </div>
+
+        <input id="taskSearch" type="text" placeholder="Görev ara..." class="mb-4" />
+        
+        <div class="flex gap-2 overflow-x-auto mb-6 pb-2" style="scrollbar-width:none;">
+          <button class="btn-secondary active filter-chip" data-filter="all" onclick="window._filterTasks('all')" aria-pressed="true">Tümü</button>
+          <button class="btn-secondary filter-chip" data-filter="active" onclick="window._filterTasks('active')" aria-pressed="false">Aktif</button>
+          <button class="btn-secondary filter-chip" data-filter="completed" onclick="window._filterTasks('completed')" aria-pressed="false">Bitenler</button>
+          <button class="btn-secondary filter-chip" data-filter="prio-high" onclick="window._filterTasks('prio-high')" aria-pressed="false">Yüksek Öncelik</button>
+        </div>
+
+        <div id="taskList"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="pomodoro" role="tabpanel">
+      <div class="card flex flex-col items-center">
+        <div class="card-title w-full">⏱️ Pomodoro</div>
+        
+        <div class="flex gap-2 w-full mb-6 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
+          <button class="btn-secondary active pomo-mode-btn flex-1" data-mode="work" onclick="window._setPomodoroMode('work')" aria-pressed="true">Çalış</button>
+          <button class="btn-secondary pomo-mode-btn flex-1" data-mode="short" onclick="window._setPomodoroMode('short')" aria-pressed="false">Kısa</button>
+          <button class="btn-secondary pomo-mode-btn flex-1" data-mode="long" onclick="window._setPomodoroMode('long')" aria-pressed="false">Uzun</button>
+        </div>
+
+        <div style="position:relative; width:240px; height:240px; margin-bottom:2rem;" aria-live="polite">
+          <svg width="240" height="240" viewBox="0 0 240 240" style="transform: rotate(-90deg);">
+            <circle cx="120" cy="120" r="110" stroke="var(--border)" stroke-width="12" fill="transparent" />
+            <circle id="pomoProgressCircle" cx="120" cy="120" r="110" stroke="var(--accent)" stroke-width="12" fill="transparent"
+                    stroke-dasharray="691.15" stroke-dashoffset="691.15" stroke-linecap="round" style="transition: stroke-dashoffset 1s linear;" />
+          </svg>
+          <div id="pomoTimerText" class="pomo-time-display display-number" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">25:00</div>
+        </div>
+
+        <div class="flex gap-4 w-full max-w-sm mb-6">
+          <button id="pomoStartBtn" class="btn-primary flex-1 text-lg">Başlat</button>
+          <button class="btn-secondary flex-1 text-lg" onclick="window._resetPomodoro()">Sıfırla</button>
+        </div>
+        
+        <div class="grid w-full gap-4" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="flex flex-col gap-2">
+            <label class="text-xs font-bold muted">Çalışma (dk)</label>
+            <input type="number" id="pomoSetWork" value="25" min="1" max="60" onchange="window._updatePomoSettings()"/>
+          </div>
+          <div class="flex flex-col gap-2">
+            <label class="text-xs font-bold muted">Kısa (dk)</label>
+            <input type="number" id="pomoSetShort" value="5" min="1" max="30" onchange="window._updatePomoSettings()"/>
+          </div>
+          <div class="flex flex-col gap-2">
+            <label class="text-xs font-bold muted">Uzun (dk)</label>
+            <input type="number" id="pomoSetLong" value="15" min="1" max="60" onchange="window._updatePomoSettings()"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="report" role="tabpanel">
+      <div class="card mb-6">
+        <div class="card-title">📊 Rapor Formu</div>
+        <div class="flex flex-col gap-4">
+          <div>
+            <label class="block font-bold text-sm mb-2">Tarih</label>
+            <input id="reportDate" type="date" />
+          </div>
+
+          <div>
+            <label class="block font-bold text-sm mb-2">Ruh Hali</label>
+            <div class="flex gap-2 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
+              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="exhausted" onclick="window._selectMood('exhausted')" aria-label="Tükenmiş">😫</button>
+              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="low" onclick="window._selectMood('low')" aria-label="Düşük">😕</button>
+              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="normal" onclick="window._selectMood('normal')" aria-label="Normal">😐</button>
+              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="good" onclick="window._selectMood('good')" aria-label="İyi">🙂</button>
+              <button class="btn-secondary mood-btn flex-1 text-2xl" data-mood="excellent" onclick="window._selectMood('excellent')" aria-label="Mükemmel">🔥</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-sm mb-2">Enerji: <span id="energyLabelVal" class="text-accent">Normal</span></label>
+            <input id="reportEnergy" type="range" min="1" max="5" value="3" style="appearance:none; height:8px; background:var(--border); border-radius:8px;" />
+          </div>
+
+          <div><label class="block font-bold text-sm mb-2">Günün Özeti</label><textarea id="reportHow"></textarea></div>
+          <div><label class="block font-bold text-sm mb-2">Kazanımlar</label><textarea id="reportAchieved"></textarea></div>
+          <div><label class="block font-bold text-sm mb-2">Engeller</label><textarea id="reportHard"></textarea></div>
+          
+          <button id="saveReportBtn" class="btn-primary w-full">Raporu Kaydet</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📜 Arşiv</div>
+        <div id="recentReportsList"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="journal" role="tabpanel">
+      <div class="card">
+        <div class="card-title">🔐 Zihin Kasası</div>
+
+        <div id="journalPinSection" class="text-center p-y-4">
+          <div class="text-3xl mb-4">🔒</div>
+          <p class="font-medium text-sm mb-6 muted">Günlük verileri cihaz belleğinde erişim kilidi ile korunur.</p>
+          <input id="journalPinInput" type="password" placeholder="PIN Kodu" maxlength="6" style="text-align:center; font-size:1.5rem; max-width:200px; margin:0 auto 1.5rem;" />
+          <button id="journalUnlockBtn" class="btn-primary mb-4 w-full">Kilidi Aç / Şifre Oluştur</button>
+          
+          <div class="mt-4 pt-4 border-t">
+             <p class="text-xs muted mb-2">Şifrenizi unuttuysanız veya baştan başlamak isterseniz:</p>
+             <button id="resetJournalBtn" class="btn-secondary text-sm" style="color:#ef4444; border-color:#ef4444;">Günlüğü ve Şifreyi Sıfırla</button>
+          </div>
+        </div>
+
+        <div id="journalContent" class="hidden">
+          <div class="flex gap-2 mb-4 p-x-2 p-y-2 bg-mesh" style="border-radius: var(--radius-md); border: 1px solid var(--border);">
+            <button class="btn-secondary j-mood-btn active flex-1 text-sm p-x-2" data-mood="🙂" onclick="window._selectJournalMood('🙂')" aria-pressed="true">Huzurlu</button>
+            <button class="btn-secondary j-mood-btn flex-1 text-sm p-x-2" data-mood="😐" onclick="window._selectJournalMood('😐')" aria-pressed="false">Nötr</button>
+            <button class="btn-secondary j-mood-btn flex-1 text-sm p-x-2" data-mood="😫" onclick="window._selectJournalMood('😫')" aria-pressed="false">Karmaşık</button>
+          </div>
+
+          <textarea id="journalInput" placeholder="Zihninizden geçenleri yazıya dökün..."></textarea>
+          <div class="flex justify-between items-center text-xs font-bold muted mt-2">
+            <span id="journalCharCount">0 Karakter</span>
+          </div>
+
+          <div class="flex gap-4 mt-6">
+            <button id="saveJournalBtn" class="btn-primary flex-1">Kaydet</button>
+            <button id="journalLockBtn" class="btn-secondary flex-1">Kilitle</button>
+          </div>
+
+          <div class="border-b my-6"></div>
+          <div id="journalEntries" class="flex flex-col gap-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="quiz" role="tabpanel">
+      <div class="card mb-6">
+        <div class="card-title">🧬 Çalışma Profili Testi</div>
+        <p class="font-medium text-sm muted mb-6">Verimlilik stratejinizin belirlenmesi için detaylı formu doldurunuz.</p>
+
+        <div class="flex justify-between text-sm font-bold mb-2">
+          <span>İlerleme</span>
+          <span id="quizProgressRatio">0/7</span>
+        </div>
+        <div style="background:var(--bg); height:8px; border-radius:8px; overflow:hidden; margin-bottom:2rem;">
+          <div id="quizProgressFill" style="background:var(--accent); height:100%; width:0%; transition:width 1s ease;"></div>
+        </div>
+
+        <div id="quizWrap"></div>
+        <button id="saveQuizBtn" class="btn-primary w-full mt-4">Profili Analiz Et</button>
+      </div>
+
+      <div class="card" id="quizPersonalityCard"></div>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="profile" role="tabpanel">
+      <div class="card flex flex-col items-center text-center mb-6">
+        <div id="avatarPreview" class="flex items-center justify-center text-white font-bold text-3xl mb-4" style="width:100px; height:100px; border-radius:50%; background:var(--accent); border: 4px solid var(--surface-solid); box-shadow: var(--shadow-md);">
+          <span id="avatarInitial">?</span>
+        </div>
+        
+        <p class="font-bold text-sm mb-3">Kimlik Rengini Seç</p>
+        <div class="flex flex-wrap justify-center gap-2 mb-6 p-y-2 p-x-2 bg-mesh" style="border-radius: var(--radius-md);" id="avatarChoices"></div>
+
+        <div class="w-full text-left mb-4">
+          <label class="block font-bold text-sm mb-2">Kullanıcı Adı</label>
+          <input id="profileName" type="text" />
+        </div>
+        
+        <div class="w-full text-left mb-6">
+          <label class="block font-bold text-sm mb-2">Profil Fotoğrafı URL (Opsiyonel)</label>
+          <input id="avatarUrlInput" type="url" placeholder="https://ornek.com/foto.jpg" />
+        </div>
+
+        <div class="dashboard-grid w-full mb-6" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="card" style="padding:1rem; margin:0;">
+            <div id="statTotalTasks" class="display-number text-accent">0</div>
+            <div class="text-xs font-bold muted">GÖREV</div>
+          </div>
+          <div class="card" style="padding:1rem; margin:0;">
+            <div id="statStreak" class="display-number text-amber-500">1</div>
+            <div class="text-xs font-bold muted">STREAK</div>
+          </div>
+          <div class="card" style="padding:1rem; margin:0;">
+            <div id="statPomodoros" class="display-number text-rose-500">0</div>
+            <div class="text-xs font-bold muted">SEANS</div>
+          </div>
+        </div>
+
+        <button id="saveProfileBtn" class="btn-primary w-full">Değişiklikleri Kaydet</button>
+      </div>
+
+      <div class="card flex flex-col items-center text-center mb-6">
+        <div class="card-title justify-center w-full">🧘 Nefes Egzersizi</div>
+        <p class="font-medium text-sm muted mb-6">Odaklanma öncesi mental sıfırlama.</p>
+        
+        <div style="position:relative; width:160px; height:160px; display:flex; align-items:center; justify-content:center; margin-bottom:2rem;">
+          <div id="breathCircle" style="width:120px; height:120px; border-radius:50%; background:var(--accent); transition:transform 4s ease-in-out, background 1s;"></div>
+          <div id="breathStatusText" class="font-bold text-white" style="position:absolute; text-shadow:0 2px 4px rgba(0,0,0,0.5);">Hazır</div>
+        </div>
+        
+        <div id="breathTimeLeftText" class="display-number text-accent mb-2">--</div>
+        <div class="font-bold text-sm muted mb-6">Kalan Süre: <span id="breathTimeTotalVal">1:00</span></div>
+
+        <div class="flex gap-4 w-full mb-6">
+          <div class="flex-1 text-left">
+            <label class="block font-bold text-xs muted mb-2">Teknik</label>
+            <select id="breathType">
+              <option value="box">Kutu Nefesi</option>
+              <option value="478">4-7-8 Tekniği</option>
+            </select>
+          </div>
+          <div class="flex-1 text-left">
+            <label class="block font-bold text-xs muted mb-2">Süre</label>
+            <select id="breathDuration">
+              <option value="1">1 Dk</option>
+              <option value="3">3 Dk</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="breathStartBtn" class="btn-primary w-full" onclick="window._startBreathing()">Başlat</button>
+        <button id="breathStopBtn" class="btn-secondary w-full hidden" onclick="window._stopBreathing()" style="border-color:#ef4444; color:#ef4444;">Durdur</button>
+      </div>
+
+      <div class="card text-center">
+        <div class="card-title justify-center">📁 Yedekleme</div>
+        <button onclick="window._exportUserData()" class="btn-secondary w-full">Arşivi İndir (JSON)</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<button id="brainDumpFab" class="hidden" aria-label="Hızlı Not Ekle">🧠</button>
+
+<div id="brainDumpPanel" class="hidden">
+  <div class="flex justify-between items-center mb-4">
+    <span class="font-bold text-lg">Zihin Notları</span>
+    <button id="closeBrainDump" class="icon-btn">✕</button>
+  </div>
+  <div id="brainDumpList" class="flex flex-col gap-2 mb-4"></div>
+  <textarea id="brainDumpText" placeholder="Notunuzu yazın..."></textarea>
+  <button id="sendBrainDump" class="btn-primary w-full mt-2">Kaydet</button>
+</div>
+
+<div id="confirmModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3 id="confirmTitle" class="text-xl font-bold mb-2">Onay</h3>
+    <p id="confirmMessage" class="font-medium muted mb-6"></p>
+    <div class="flex gap-4">
+      <button id="confirmCancelBtn" class="btn-secondary flex-1">İptal</button>
+      <button id="confirmApproveBtn" class="btn-danger flex-1">Onayla</button>
+    </div>
+  </div>
+</div>
+
+<button id="scrollTopBtn" class="hidden icon-btn" style="position:fixed; bottom:calc(2rem + env(safe-area-inset-bottom)); left:1.5rem; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-sm); z-index:90;" aria-label="Yukarı Çık">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="toast" class="toast" role="status"></div>
+
+</body>
+</html>
